@@ -1,0 +1,6 @@
+/*    SPA fallback: let Vue handle all routes except /api/* and static files
+/api/*  :proxy  -> Cloudflare Pages Functions (not actually needed, Functions auto-detect)
+/*      :200    -> /index.html for Vue Router
+*/
+/api/*  200
+/*      /index.html   200
