@@ -58,13 +58,39 @@ function scoreLandingPage(urlObj) {
 }
 
 /**
+ * URL 规范化流水线：
+ *  1) 去除首尾空白
+ *  2) 去除包裹性的反引号/单双引号
+ *  3) HTML 实体解码（&amp;→&、&quot;→"、&#39;→'、&lt;→<、&gt;→>）
+ *  必须在交给 new URL() 之前执行，否则 &amp; 会被当成参数名的一部分
+ */
+function normalizeHtmlUrl(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  let u = raw.trim();
+  // 去除包裹 href 的反引号、单引号、双引号（可能出现多层或混用）
+  u = u.replace(/^[`"'\s]+|[`"'\s]+$/g, '');
+  // HTML 实体解码 —— 至少覆盖 &amp; 这个最常见的坑
+  u = u.replace(/&amp;/gi, '&');
+  u = u.replace(/&quot;/gi, '"');
+  u = u.replace(/&#39;/gi, "'");
+  u = u.replace(/&lt;/gi, '<');
+  u = u.replace(/&gt;/gi, '>');
+  // 数字实体 &#NNN; 和 &#xHH;
+  u = u.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
+  u = u.replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  return u.trim();
+}
+
+/**
  * HTML跳转链接解析器：从HTML文本里提取真实跳转URL
  */
 function extractJumpUrls(html, baseUrl) {
   const urls = new Set();
   const add = (u) => {
     if (!u) return;
-    try { urls.add(new URL(u, baseUrl).href); } catch (_) {}
+    const normalized = normalizeHtmlUrl(u);
+    if (!normalized) return;
+    try { urls.add(new URL(normalized, baseUrl).href); } catch (_) {}
   };
 
   // 1) meta refresh
@@ -205,7 +231,14 @@ export async function onRequestGet(context) {
             let s = 0;
             if (p.hostname !== curHost) s += 10;
             s += scoreLandingPage(p).score; // 落地页分也纳入候选选择
-            if (p.searchParams.size > 0) s += 2;
+            // --- 含 & 多参数的链接（HTML-parse 中解码出来的真链接特征）优先 ---
+            const paramSize = p.searchParams.size;
+            if (u.includes('&') || paramSize >= 2) {
+              s += 8;                          // 多参数：说明是完整详情链而非裸跳
+              s += Math.min(paramSize, 6) * 2; // 参数越多，权重越高（封顶+12）
+            } else if (paramSize > 0) {
+              s += 2;                          // 单参数的兜底分（保持原行为）
+            }
             return { u, s };
           });
           scored.sort((a, b) => b.s - a.s);
