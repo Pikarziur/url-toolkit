@@ -33,23 +33,58 @@
         <section v-if="result" class="card">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
             <h2 class="card-title" style="margin: 0;"><span class="icon">🛤️</span> 跳转链（共 {{ result.chain.length }} 步）</h2>
-            <span class="badge badge-success">完成</span>
+            <div style="display: flex; gap: 6px;">
+              <span v-if="result.recommendedIsLanding" class="landing-badge">🎯 命中真链接</span>
+              <span class="badge badge-success">完成</span>
+            </div>
           </div>
           <div class="chain-list">
-            <div v-for="(step, idx) in result.chain" :key="idx" class="chain-step">
+            <div
+              v-for="(step, idx) in result.chain"
+              :key="idx"
+              class="chain-step"
+              :class="{ landing: step.isLanding }"
+              :title="step.reasons?.length ? '判定理由：\n' + step.reasons.join('\\n') : ''"
+            >
               <span class="idx">{{ idx + 1 }}</span>
               <span class="via tag" :class="step.via === 'HTML-parse' ? 'badge-warn' : ''">
                 {{ step.via }}
               </span>
+              <span v-if="step.isLanding" class="landing-badge" title="疑似你要的真实完整链接">🎯 真链接</span>
               <span class="url">{{ step.url }}</span>
+            </div>
+          </div>
+          <p v-if="result.landingScore < 10" class="muted" style="margin-top: 10px; font-size: 12px;">
+            💡 如果这次没有命中"真链接"，通常是链接不是电商详情页，你可以把常见域名告诉我，我加进识别规则里。
+          </p>
+        </section>
+
+        <!-- 推荐真实链接（命中时优先显示在最上方，最大最醒目的卡片） -->
+        <section v-if="result && result.recommendedIsLanding" class="card" style="border-color: var(--success); box-shadow: 0 6px 22px color-mix(in srgb, var(--success) 14%, transparent);">
+          <h2 class="card-title"><span class="icon">🎯</span> 推荐真实链接（这就是你要的）</h2>
+          <p class="muted" style="margin-top: -8px; margin-bottom: 12px; font-size: 12px;">
+            根据「电商详情页域名/路径 + 核心参数(id/itemId/activityId)」智能识别，跳过后续无意义的埋点追踪跳转
+          </p>
+          <div class="result-box recommended">
+            <div class="val code">{{ result.recommendedUrl }}</div>
+            <div class="foot">
+              <button class="btn-copy" :class="{ copied: copied.recommended }" @click="copy(result.recommendedUrl, 'recommended')">
+                {{ copied.recommended ? '✓ 已复制（直接用这个）' : '📋 复制这个链接' }}
+              </button>
             </div>
           </div>
         </section>
 
-        <!-- 最终URL -->
+        <!-- 最终URL（当和推荐链接不一致时降级显示，标"走完所有跳转的最后一步"） -->
         <section v-if="result" class="card">
-          <h2 class="card-title"><span class="icon">🎯</span> 最终链接</h2>
-          <div class="result-box">
+          <h2 class="card-title">
+            <span class="icon">{{ result.recommendedIsLanding ? '🪂' : '🎯' }}</span>
+            {{ result.recommendedIsLanding ? '最终跳转结果（走完所有跳转的最后一步）' : '最终链接' }}
+          </h2>
+          <p v-if="result.recommendedIsLanding" class="muted" style="margin-top: -8px; margin-bottom: 12px; font-size: 12px;">
+            这是严格跟随完所有跳转后的最后一步，通常是埋点/追踪页，<strong>不推荐</strong>复制，上面的"推荐真实链接"才是带商品参数的完整长链。
+          </p>
+          <div class="result-box" :class="{ subtle: result.recommendedIsLanding }">
             <div class="val code">{{ result.finalUrl }}</div>
             <div class="foot">
               <button class="btn-copy" :class="{ copied: copied.final }" @click="copy(result.finalUrl, 'final')">
@@ -65,6 +100,8 @@
             <h2 class="card-title" style="margin: 0;">
               <span class="icon">🔍</span> URL 参数
               <span class="badge">{{ Object.keys(result.params).length }} 个</span>
+              <span v-if="result.recommendedIsLanding" class="landing-badge" style="margin-left: 6px;">来自🎯真链接</span>
+              <span v-else class="tag" style="margin-left: 6px;">来自最终链接</span>
             </h2>
             <span v-if="selectedKey" class="muted">
               已选参数：<code class="code" style="color: var(--primary);">{{ selectedKey }}</code>
