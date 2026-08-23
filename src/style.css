@@ -522,6 +522,165 @@ input:focus, textarea:focus {
   opacity: 0.82;
 }
 
+/* ===== 顶部 Tab 切换栏（强化视觉：胶囊/渐变/阴影/滑动） ===== */
+.tab-bar {
+  display: flex;
+  gap: 10px;
+  padding: 6px;
+  margin-bottom: 24px;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: 10px;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+}
+.tab-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-sub);
+  background: transparent;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  transition: all 0.22s cubic-bezier(.4,0,.2,1);
+  position: relative;
+  white-space: nowrap;
+}
+.tab-btn:hover {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+.tab-btn.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary), #ec4899);
+  border-color: transparent;
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--primary) 70%, transparent),
+              0 2px 6px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+.tab-btn .tab-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.tab-btn .tab-count {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.22);
+  color: #fff;
+  margin-left: 2px;
+}
+.tab-btn:not(.active) .tab-count {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* ===== 查禁拍：搜索栏 & 结果 ===== */
+.ban-search-wrap {
+  margin-bottom: 14px;
+}
+.ban-search-input {
+  font-size: 15px;
+}
+.ban-clear-btn {
+  flex-shrink: 0;
+  min-width: 84px;
+}
+.ban-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.ban-result-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 640px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.ban-result-list::-webkit-scrollbar { width: 6px; }
+.ban-result-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: 999px;
+}
+
+.ban-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: color-mix(in srgb, var(--danger) 7%, var(--card));
+  border: 1.5px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 10px;
+  flex-wrap: wrap;
+  transition: all 0.15s ease;
+}
+.ban-result-item:hover {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 11%, var(--card));
+  transform: translateX(2px);
+}
+
+.ban-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.ban-src-tag {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
+}
+.ban-src-tag[data-src="anheng"] {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.ban-src-tag[data-src="error"] {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+.ban-src-tag[data-src="long"] {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+@media (prefers-color-scheme: dark) {
+  .ban-src-tag[data-src="anheng"] { background: #422006; color: #fde68a; border-color: #713f12; }
+  .ban-src-tag[data-src="error"]  { background: #450a0a; color: #fecaca; border-color: #7f1d1d; }
+  .ban-src-tag[data-src="long"]   { background: #172554; color: #bfdbfe; border-color: #1e3a8a; }
+}
+
+.ban-copy-btn {
+  flex-shrink: 0;
+  padding: 5px 9px;
+  font-size: 12.5px;
+}
+
 /* =========================================================
  * 移动端适配（手机端 / 平板小屏）
  * 断点：< 860px 进入单列，< 480px 额外收紧
@@ -553,6 +712,31 @@ input:focus, textarea:focus {
     max-width: 100%;
     font-size: 13px;
   }
+
+  /* ---- Tab & 查禁拍：大屏手机/平板 ---- */
+  .tab-bar {
+    margin-bottom: 18px;
+    top: 6px;
+    gap: 6px;
+    padding: 5px;
+  }
+  .tab-btn {
+    padding: 10px 12px;
+    font-size: 14px;
+    gap: 6px;
+  }
+  .tab-btn .tab-icon { font-size: 16px; }
+  .tab-btn .tab-count { font-size: 10.5px; padding: 1.5px 6.5px; }
+
+  .ban-result-list {
+    max-height: 70vh;
+  }
+  .ban-result-item {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  .ban-text { font-size: 13.5px; }
+  .ban-src-tag { font-size: 11px; padding: 2.5px 6px; }
 }
 
 /* ---- 小屏手机 (< 480px)：iPhone SE / 安卓入门机 ---- */
@@ -658,6 +842,50 @@ input:focus, textarea:focus {
     gap: 6px;
   }
   .tpl-item .tpl-name { font-size: 13.5px; }
+
+  /* ---- Tab & 查禁拍：小屏手机 ---- */
+  .tab-bar {
+    margin-bottom: 14px;
+    top: 4px;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 14px;
+  }
+  .tab-btn {
+    padding: 11px 8px;
+    font-size: 13.5px;
+    gap: 5px;
+    border-radius: 12px;
+  }
+  .tab-btn .tab-icon { font-size: 15px; }
+  .tab-btn .tab-text { line-height: 1.2; }
+  .tab-btn .tab-count {
+    font-size: 10px;
+    padding: 1.5px 6px;
+    margin-left: 0;
+  }
+
+  .ban-search-wrap {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ban-search-wrap input { width: 100%; }
+  .ban-clear-btn { width: 100%; min-width: 0; justify-content: center; }
+
+  .ban-stats { gap: 8px; }
+
+  .ban-result-list { max-height: 65vh; }
+  .ban-result-item {
+    padding: 10px;
+    gap: 6px;
+    border-radius: 9px;
+  }
+  .ban-text { font-size: 13px; }
+  .ban-src-tag { font-size: 10.5px; padding: 2px 5.5px; }
+  .ban-copy-btn {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
 }
 
 /* ---- 超窄屏手机 (<= 390px)：iPhone SE 2/3、安卓小屏 ---- */
@@ -743,5 +971,31 @@ input:focus, textarea:focus {
   .tag {
     font-size: 10px;
     padding: 2px 6px;
+  }
+
+  /* ---- Tab & 查禁拍：超窄屏手机 ---- */
+  .tab-bar {
+    gap: 3px;
+    padding: 3px;
+    border-radius: 12px;
+  }
+  .tab-btn {
+    padding: 10px 6px;
+    font-size: 13px;
+    gap: 4px;
+    border-radius: 10px;
+  }
+  .tab-btn .tab-icon { font-size: 14px; }
+  .tab-btn .tab-count { font-size: 9.5px; padding: 1px 5px; }
+
+  .ban-result-item {
+    padding: 9px;
+    gap: 5px;
+  }
+  .ban-text { font-size: 12.5px; }
+  .ban-src-tag {
+    font-size: 10px;
+    padding: 1.5px 5px;
+    border-radius: 5px;
   }
 }
