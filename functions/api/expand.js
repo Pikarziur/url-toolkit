@@ -1,8 +1,35 @@
 // Cloudflare Pages Functions: GET /api/expand?url=<短链>
 // Workers runtime - 仅使用标准 fetch / Web 标准 API
 
-const MAX_RECURSION = 8;   // 最多处理步数（手动细粒度，所以上限放宽）
-const REQUEST_TIMEOUT_MS = 15000;
+const MAX_RECURSION = 10;     // 浏览器模拟链路步数上限（含 HTML-parse 二跳）
+const REQUEST_TIMEOUT_MS = 18000;
+
+// —— 常见电商自定义 scheme → https 落地页的回跳映射 ——
+// 当浏览器级链路最后一步停留在 taobao:// / tbopen:// 这类 App 唤起协议时，
+// 普通手机浏览器会在唤起失败后自动 fallback 到对应 H5；我们在这里做同等处理，
+// 保证 finalUrl 一定是 https 可直接访问的真链接。
+//
+// 注意：scheme 的 query 一般是明文拼接 itemId=678...，不是 URL-encoded 的 itemId%3D，
+//      所以正则里统一写 `[=:]` 同时兼容「itemId=xxx」和「itemId:xxx」。
+const APP_SCHEME_FALLBACKS = [
+  { re: /itemId[=:](\d+)/i, make: (m) => `https://item.taobao.com/item.htm?id=${m[1]}` }, // 淘宝/天猫 tbopen 里的 itemId
+  { re: /id[=:](\d+)/i,    make: (m) => `https://item.taobao.com/item.htm?id=${m[1]}` }, // 兜底：只要 scheme 里带 id=数字就拼淘宝 H5
+  { re: /skuId[=:](\d+)/i, make: (m) => `https://item.jd.com/${m[1]}.html` },
+  { re: /wareId[=:](\d+)/i,make: (m) => `https://item.jd.com/${m[1]}.html` },
+  { re: /goods?Id[=:](\d+)/i, make: (m) => `https://item.jd.com/${m[1]}.html` },
+  { re: /aweme_id[=:](\d+)/i, make: (m) => `https://www.douyin.com/video/${m[1]}` },
+  { re: /note_id[=:](\w+)/i,  make: (m) => `https://www.xiaohongshu.com/explore/${m[1]}` },
+];
+function fallbackForAppScheme(rawUrl) {
+  for (const rule of APP_SCHEME_FALLBACKS) {
+    const m = rawUrl.match(rule.re);
+    if (m) {
+      const u = rule.make(m, rawUrl);
+      if (u) return u;
+    }
+  }
+  return null;
+}
 
 /**
  * 判定一个 URL 像不像「真实落地页/商品详情页」。
@@ -82,63 +109,270 @@ function normalizeHtmlUrl(raw) {
 }
 
 /**
- * HTML跳转链接解析器：从HTML文本里提取真实跳转URL
+ * 从 HTML 响应中提取"浏览器下一步要去的地址"：
+ *  — 优先级与真实浏览器保持一致 —
+ *   1. <meta http-equiv="refresh" content="0; url=xxx">    （最常见的 H5 强跳）
+ *   2. 内联 <script> 中立即执行的 location.assign/replace/href = xxx
+ *   3. 页面中带明确跳转 id 的 <a href> 按钮 / data-url / data-href
+ *   4. 通用 JSON 片段中出现的 url 字段
+ *
+ * 返回候选 URL 数组（已按权重排序，[0] 权重最高）。
+ * 与旧版 extractJumpUrls 不同：这里给每个候选加了权重分，保证 meta refresh = 浏览器第一优先级。
  */
-function extractJumpUrls(html, baseUrl) {
-  const urls = new Set();
-  const add = (u) => {
-    if (!u) return;
+function extractBrowserNextUrls(html, baseUrl) {
+  const add = (u, weight) => {
+    if (!u) return null;
     const normalized = normalizeHtmlUrl(u);
-    if (!normalized) return;
-    try { urls.add(new URL(normalized, baseUrl).href); } catch (_) {}
+    if (!normalized) return null;
+    let resolved;
+    try { resolved = new URL(normalized, baseUrl).href; } catch (_) { return null; }
+    return { u: resolved, w: weight };
   };
+  const candidates = [];
 
-  // 1) meta refresh
+  // 0) 快速排除：静态资源 URL 不能当跳转链接（常见 meta refresh 误跳到 .css/.js）
+  const isStaticAsset = (u) => /\.(css|js|jpg|jpeg|png|gif|webp|svg|woff|woff2|ttf|ico|map|mp4|mp3|webm|wasm)(\?|#|$)/i.test(u);
+
+  // 1) meta refresh → 浏览器会严格按这个跳，给 1000 分独占
   const metaMatch = html.match(/<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*>/i);
   if (metaMatch) {
     const content = metaMatch[0].match(/content\s*=\s*["']([^"']+)["']/i);
     if (content) {
       const m = content[1].match(/url\s*=\s*(\S+)/i);
-      if (m) add(m[1].replace(/['")]/g, '').trim());
+      if (m) {
+        const rawUrl = m[1].replace(/['")\s<>]+$/g, '').replace(/^['"(<\s]+/g, '');
+        if (!isStaticAsset(rawUrl)) {
+          const pick = add(rawUrl, 1000);
+          if (pick) candidates.push(pick);
+        }
+      }
     }
   }
 
-  // 2) JS 跳转 - 多种写法
-  const jsPatterns = [
-    /(?:window\.)?location\s*\.\s*href\s*=\s*["']([^"']+)["']/g,
-    /location\s*\.\s*replace\s*\(\s*["']([^"']+)["']\s*\)/g,
-    /location\s*\.\s*assign\s*\(\s*["']([^"']+)["']\s*\)/g,
-    /window\.location\s*=\s*["']([^"']+)["']/g,
-    /self\.location\s*=\s*["']([^"']+)["']/g,
-    /top\.location\s*=\s*["']([^"']+)["']/g,
+  // 2) JS 跳转（location = / .href = / .replace / .assign）→ 次优先
+  const jsRules = [
+    { re: /var\s+url\s*=\s*["']([^"']+)["']/g,                             w: 920 }, // 淘宝 e.tb.cn 这种模板会先写 var url = '真实跳转H5'，最高优先级
+    { re: /const\s+url\s*=\s*["']([^"']+)["']/g,                           w: 919 },
+    { re: /let\s+url\s*=\s*["']([^"']+)["']/g,                             w: 918 },
+    { re: /(?:window\.)?location\s*\.\s*href\s*=\s*["']([^"']+)["']/g,      w: 900 },
+    { re: /location\s*\.\s*replace\s*\(\s*["']([^"']+)["']\s*\)/g,           w: 890 },
+    { re: /location\s*\.\s*assign\s*\(\s*["']([^"']+)["']\s*\)/g,            w: 880 },
+    { re: /window\.location\s*=\s*["']([^"']+)["']/g,                        w: 870 },
+    { re: /self\.location\s*=\s*["']([^"']+)["']/g,                          w: 860 },
+    { re: /top\.location\s*=\s*["']([^"']+)["']/g,                           w: 850 },
+    // 兜底：location = "xxx" 不加前缀
+    { re: /(?:^|[^.\w])location\s*=\s*["']([^"']+)["']/g,                    w: 840 },
   ];
-  for (const re of jsPatterns) {
+  for (const { re, w } of jsRules) {
     let m;
-    while ((m = re.exec(html)) !== null) add(m[1]);
+    while ((m = re.exec(html)) !== null) {
+      if (isStaticAsset(m[1])) continue; // var/const/let url = 'xxx.js' 这种也可能是资源 url
+      const pick = add(m[1], w);
+      if (pick) candidates.push(pick);
+    }
   }
 
-  // 3) data-url / href 属性带明显跳转 id 的链接
-  const attrPatterns = [
-    /data-url\s*=\s*["']([^"']+)["']/g,
-    /data-href\s*=\s*["']([^"']+)["']/g,
-    /<a[^>]+id\s*=\s*["'](?:skip|jump|J_Link|J_SubmitStatic|btn-open)[^"']*["'][^>]+href\s*=\s*["']([^"']+)["']/gi,
-    /<a[^>]+href\s*=\s*["']([^"']+)["'][^>]+id\s*=\s*["'](?:skip|jump|J_Link|J_SubmitStatic|btn-open)[^"']*["']/gi,
-  ];
-  for (const re of attrPatterns) {
-    let m;
-    while ((m = re.exec(html)) !== null) add(m[1]);
+  // 3) 自定义 scheme 的 App 唤起（tbopen:// / taobao:// 等）→ 浏览器会尝试打开 App，
+  //    我们把它也当一条候选，之后由 APP_SCHEME_FALLBACKS 转成 H5 链接。
+  //    写在 html 里的 `tbopen://...`、<iframe src="tbopen://">、<a href="tbopen://"> 都要抓
+  const appSchemeRe = /["']([a-z][a-z0-9+\-.]*:\/\/[^"']+)["']/gi;
+  let am;
+  while ((am = appSchemeRe.exec(html)) !== null) {
+    const scheme = am[1];
+    if (!/^https?:\/\//i.test(scheme)) {
+      const fallback = fallbackForAppScheme(scheme);
+      if (fallback) {
+        const pick = add(fallback, 780);
+        if (pick) candidates.push(pick);
+      }
+    }
+  }
+  // 同样从 tbopen:// 自定义 scheme 的 query 里提取到的 itemId 直接拼 H5（比前面更宽松）
+  // 形如：tbopen://m.taobao.com/tbopen/index.html?action=ali.open.nav&module=h5&browserFlag=zhihu&bootPage=TB_H5_HOME&appkey=&e=h5toapp&wh_weex_weex_source=hybrid&itemId=699237567551
+  const looseSchemeRe = /\b(tbopen|taobao|tmall|openapp\.jd\.m|snssdk1128|xhsdiscover):\/\/[^\s<>"'`)]+/gi;
+  let lm;
+  while ((lm = looseSchemeRe.exec(html)) !== null) {
+    const fallback = fallbackForAppScheme(lm[0]);
+    if (fallback) {
+      const pick = add(fallback, 770);
+      if (pick) candidates.push(pick);
+    }
   }
 
-  // 4) 通用 JSON 片段里的 url 字段
+  // 4) data-url / data-href / 带跳转 id 的 a 链接
+  const attrRules = [
+    { re: /data-url\s*=\s*["']([^"']+)["']/g,                                              w: 700 },
+    { re: /data-href\s*=\s*["']([^"']+)["']/g,                                             w: 690 },
+    { re: /<a[^>]+id\s*=\s*["'](?:skip|jump|J_Link|J_SubmitStatic|btn-open)[^"']*["'][^>]+href\s*=\s*["']([^"']+)["']/gi, w: 650 },
+    { re: /<a[^>]+href\s*=\s*["']([^"']+)["'][^>]+id\s*=\s*["'](?:skip|jump|J_Link|J_SubmitStatic|btn-open)[^"']*["']/gi, w: 650 },
+  ];
+  for (const { re, w } of attrRules) {
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      const pick = add(m[1], w);
+      if (pick) candidates.push(pick);
+    }
+  }
+
+  // 5) 通用 JSON 片段里的 url 字段（权重最低，因为 JSON 里可能是资源 url/埋点 url 不是跳转）
   const jsonUrlRe = /["']?url["']?\s*[:=]\s*["']((?:https?:)?\/\/[^"'\s]+)["']/g;
   let jm;
   while ((jm = jsonUrlRe.exec(html)) !== null) {
     let u = jm[1];
     if (u.startsWith('//')) u = 'https:' + u;
-    add(u);
+    const pick = add(u, 500);
+    if (pick) candidates.push(pick);
   }
 
-  return [...urls];
+  // —— 二次打分：选出来的候选中，更像"浏览器会去的下一跳"的再加权 ——
+  //   ① 与当前页同域的 meta/JS 跳转肯定比跳第三方更优先，但跨域才是真落地页
+  //   ② 含 & 多参数 + 电商 H5 域名 + id 参数的链接，权重 *2
+  try {
+    const curHost = new URL(baseUrl).hostname.toLowerCase();
+    for (const c of candidates) {
+      const pu = new URL(c.u);
+      const host = pu.hostname.toLowerCase();
+      const ls = scoreLandingPage(pu).score;
+      c.w += ls; // 落地页分叠加进去
+      if (host !== curHost) c.w += 20;
+      const paramSize = pu.searchParams.size;
+      if (c.u.includes('&') || paramSize >= 2) {
+        c.w += 8 + Math.min(paramSize, 6) * 2;
+      } else if (paramSize > 0) {
+        c.w += 2;
+      }
+    }
+  } catch (_) {}
+
+  candidates.sort((a, b) => b.w - a.w);
+  // 去重（同一个 url 可能多条规则命中），保留权重最高的第一条
+  const seen = new Set();
+  const out = [];
+  for (const c of candidates) {
+    if (seen.has(c.u)) continue;
+    seen.add(c.u);
+    out.push(c.u);
+  }
+  return out;
+}
+
+/**
+ * 【你要的效果】模拟浏览器实际打开短链时的最终 URL：
+ *   1. HTTP 3xx 全部自动跟随（redirect:'follow'，相当于浏览器地址栏的跳转）
+ *   2. 如果跟随结束后拿到的是 200 HTML：
+ *      2.1 从 HTML 中用 extractBrowserNextUrls 抓下一步要跳的地址
+ *      2.2 如果是 App 自定义 scheme，用 fallbackForAppScheme 转 H5
+ *      2.3 再把这个地址当作新的短链，递归处理
+ *   3. 直到没有下一步或达到 MAX_RECURSION
+ *   4. 如果某一步停在错误页（err.* / 404 路径 / error*），回退到"已经访问过的最高落地页分的 URL"
+ * 最终返回 { finalUrl, chain }。
+ */
+function looksLikeErrorPage(urlObjOrStr) {
+  let url;
+  try { url = typeof urlObjOrStr === 'string' ? new URL(urlObjOrStr) : urlObjOrStr; }
+  catch (_) { return false; }
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname.toLowerCase();
+  return (
+    /^err\./.test(host) ||
+    /error|404|notfound|errpage|scanError/i.test(path) ||
+    (path.includes('error') && url.searchParams.get('c') === '404')
+  );
+}
+async function simulateBrowserExpand(initialUrl) {
+  const chain = [];
+  const visited = new Set();
+  const seenForDedupe = []; // {url, score}  — 用来回退
+  let currentUrl = initialUrl;
+  let lastHtml = null;
+  let lastHtmlBase = null;
+
+  const pushAndRemember = (entry) => {
+    chain.push(entry);
+    try {
+      const s = scoreLandingPage(new URL(entry.url)).score;
+      seenForDedupe.push({ url: entry.url, score: s });
+    } catch (_) {}
+  };
+
+  for (let hops = 0; hops < MAX_RECURSION; hops++) {
+    if (visited.has(currentUrl)) break;
+    visited.add(currentUrl);
+
+    // A. 先跟完所有 HTTP 3xx（浏览器自动跟）
+    const resp = await fetchWithTimeout(currentUrl, {
+      redirect: 'follow', // 关键：浏览器级自动跟随，不手动处理 3xx
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
+    });
+    // fetch(redirect:'follow') 返回的 resp.url 就是浏览器地址栏里最终停的 URL
+    const stoppedUrl = resp.url || currentUrl;
+    if (!visited.has(stoppedUrl)) visited.add(stoppedUrl);
+
+    let via = 'followed-HTTP';
+    const ct = resp.headers.get('content-type') || '';
+    const isHtml = /text\/html|application\/xhtml\+xml/i.test(ct);
+    let nextCandidates = [];
+
+    if (isHtml && (resp.status === 200 || resp.status === 304 || resp.status === 404 || resp.status === 403)) {
+      const html = await resp.text();
+      lastHtml = html;
+      lastHtmlBase = stoppedUrl;
+      nextCandidates = extractBrowserNextUrls(html, stoppedUrl)
+        .filter(u => u !== stoppedUrl && u !== currentUrl && !visited.has(u));
+      if (nextCandidates.length > 0) via = 'followed+HTML-parse';
+    }
+
+    pushAndRemember({ url: stoppedUrl, status: resp.status, via });
+
+    if (nextCandidates.length === 0) {
+      // B. 走到了一个非 HTML（如 JSON/图片）或者 HTML 里找不到任何下一跳 → 就停在 stoppedUrl
+      currentUrl = stoppedUrl;
+      break;
+    }
+    currentUrl = nextCandidates[0];
+  }
+
+  // C. 兜底：即使停在某个 HTML 页没抓出下一跳，但 HTML 里存在自定义 scheme 片段（常见于淘宝 e.tb.cn），
+  //    再扫一次整包 HTML 的 scheme 做 App→H5 fallback
+  if (lastHtml) {
+    const appSchemeRe2 = /\b(tbopen|taobao|tmall|openapp\.jd\.m|snssdk1128|xhsdiscover):\/\/[^\s<>"'`)]+/gi;
+    let m;
+    const fallbackCandidates = [];
+    while ((m = appSchemeRe2.exec(lastHtml)) !== null) {
+      const fb = fallbackForAppScheme(m[0]);
+      if (fb && !visited.has(fb)) fallbackCandidates.push(fb);
+    }
+    if (fallbackCandidates.length > 0) {
+      // 从候选里挑"落地页分最高的那个"，基本就是你在手机浏览器里最终会看到的详情页
+      const scored = fallbackCandidates.map(u => {
+        let s = 0;
+        try { s = scoreLandingPage(new URL(u)).score + (u.includes('&') ? 10 : 0); } catch (_) {}
+        return { u, s };
+      }).sort((a, b) => b.s - a.s);
+      const finalPick = scored[0].u;
+      if (!visited.has(finalPick)) {
+        pushAndRemember({ url: finalPick, status: 200, via: 'AppScheme→H5-fallback' });
+        currentUrl = finalPick;
+      }
+    }
+  }
+
+  // D. 终极兜底：如果 currentUrl 是错误页 / 404 页，回退到链路上"落地页分最高的那个"
+  //    这就是你在真实浏览器场景里遇到 error1.html 时会做的：点返回，用上一步的 iframe src 页面
+  if (looksLikeErrorPage(currentUrl) && seenForDedupe.length > 1) {
+    const sorted = [...seenForDedupe].sort((a, b) => b.score - a.score);
+    const fallback = sorted.find((c) => !looksLikeErrorPage(c.url) && c.url !== currentUrl);
+    if (fallback) {
+      pushAndRemember({ url: fallback.url, status: 200, via: 'ErrorPage→Fallback' });
+      currentUrl = fallback.url;
+    }
+  }
+
+  return { finalUrl: currentUrl, chain };
 }
 
 function okJson(data) {
@@ -189,21 +423,27 @@ export async function onRequestGet(context) {
     return errJson('仅支持 http / https 协议的链接', 400);
   }
 
-  const chain = [];
+  const initialUrl = parsedTarget.href;
   const visited = new Set();
-  let currentUrl = parsedTarget.href;
-  let landing = null; // 当前发现的最高分落地页
 
   try {
+    // ===== 阶段 A：走浏览器级模拟 — 这是你要的"放到浏览器打开后最终会在哪"的结果 =====
+    const { finalUrl: browserFinal, chain: browserChain } = await simulateBrowserExpand(initialUrl);
+
+    // ===== 阶段 B：同时保留旧的细粒度 manual 链路（便于展示每一跳 via/score），
+    //              但从 browserFinal 继续往后扫一遍落地页分，最终推荐以 browserFinal 为准 =====
+    const chain = [];
+    let currentUrl = initialUrl;
+    let landing = null; // 当前发现的最高分落地页
+
     for (let hops = 0; hops < MAX_RECURSION; hops++) {
       if (visited.has(currentUrl)) break;
       visited.add(currentUrl);
 
-      // ===== 关键：redirect:'manual'，每一次请求只处理 1 次跳转，chain 精准不重复 =====
       const resp = await fetchWithTimeout(currentUrl, {
         redirect: 'manual',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         },
@@ -218,31 +458,14 @@ export async function onRequestGet(context) {
         if (loc) { try { nextUrl = new URL(loc, currentUrl).href; via = 'HTTP-3xx'; } catch (_) {} }
       }
 
-      // --- B. 200 HTML 解析 DOM/JS 跳转 ---
+      // --- B. 200 HTML 解析 DOM/JS 跳转（新 extractBrowserNextUrls 覆盖 meta+JS+scheme+属性+JSON） ---
       const ct = resp.headers.get('content-type') || '';
       const isHtml = /text\/html|application\/xhtml\+xml/i.test(ct);
       if ((status === 200 || status === 304 || (status >= 400 && status < 500)) && isHtml) {
         const html = await resp.text();
-        const candidates = extractJumpUrls(html, currentUrl).filter(u => u !== currentUrl && !visited.has(u));
+        const candidates = extractBrowserNextUrls(html, currentUrl).filter(u => u !== currentUrl && !visited.has(u));
         if (candidates.length > 0) {
-          const curHost = new URL(currentUrl).hostname;
-          const scored = candidates.map((u) => {
-            const p = new URL(u);
-            let s = 0;
-            if (p.hostname !== curHost) s += 10;
-            s += scoreLandingPage(p).score; // 落地页分也纳入候选选择
-            // --- 含 & 多参数的链接（HTML-parse 中解码出来的真链接特征）优先 ---
-            const paramSize = p.searchParams.size;
-            if (u.includes('&') || paramSize >= 2) {
-              s += 8;                          // 多参数：说明是完整详情链而非裸跳
-              s += Math.min(paramSize, 6) * 2; // 参数越多，权重越高（封顶+12）
-            } else if (paramSize > 0) {
-              s += 2;                          // 单参数的兜底分（保持原行为）
-            }
-            return { u, s };
-          });
-          scored.sort((a, b) => b.s - a.s);
-          nextUrl = scored[0].u;
+          nextUrl = candidates[0];
           if (via === 'HTTP-direct') via = 'HTML-parse';
         }
       }
@@ -268,31 +491,56 @@ export async function onRequestGet(context) {
         landing = { ...stepInfo, params: paramsFromUrl(currentUrl) };
       }
 
-      if (!nextUrl) break; // 没下一步，停
-
-      // 即使已经找到了高分落地页，也继续把后续跳转展示出来
-      // 但推荐结果会锁定在高分落地页，不再以"最后一步"为准
+      if (!nextUrl) break;
       currentUrl = nextUrl;
     }
 
-    const finalUrl = currentUrl;
-    // 如果发现了高分落地页，而且它不在最后一步 → 优先推荐落地页
-    const useLanding = !!(landing && landing.url !== finalUrl && landing.landingScore >= 18);
-    const recommendedUrl = useLanding ? landing.url : finalUrl;
-    const recommendedParams = useLanding ? landing.params : paramsFromUrl(finalUrl);
+    // —— 核心：你说 finalUrl 应当 = 浏览器真正打开后停的最后一步（= browserFinal）——
+    //  不再以 HTTP 3xx 最后一步算 finalUrl。
+    const finalUrl = browserFinal;
+
+    // 推荐落地页：三条路取"落地页分最高的那个"，且排除明显是错误页/404的 URL
+    const candidatesForReco = [
+      { url: finalUrl,                         label: '浏览器最终停留页' },
+      ...(landing && landing.url ? [{ url: landing.url, score: landing.landingScore, params: landing.params, label: '最高落地页分' }] : []),
+    ];
+    let best = null;
+    for (const c of candidatesForReco) {
+      if (looksLikeErrorPage(c.url)) continue; // 错误页绝对不能当推荐结果
+      let s = -Infinity, params = null;
+      try {
+        const r = scoreLandingPage(new URL(c.url));
+        s = r.score;
+        params = paramsFromUrl(c.url);
+        // 含 & 的链接在用户眼里就是"完整链接"，在同分下优先
+        if (c.url.includes('&')) s += 6;
+      } catch (_) {}
+      if (!best || s > best.score) {
+        best = { score: s, url: c.url, params };
+      }
+    }
+    // 如果以上候选全是错误页（极端情况），就退回 finalUrl，但 params 走 paramsFromFinalOnly（比 error 页那堆 query 有意义）
+    if (!best) {
+      const fallback = !looksLikeErrorPage(finalUrl) ? finalUrl : (landing?.url || finalUrl);
+      best = { score: 0, url: fallback, params: paramsFromUrl(fallback) };
+    }
+    const recommendedUrl = best.url;
+    const recommendedParams = best.params;
+    const useLanding = recommendedUrl !== finalUrl;
 
     return okJson({
       ok: true,
-      finalUrl,                         // 跳转链严格意义上的最后一步
-      recommendedUrl,                   // 推荐的"你要的真链接"
-      recommendedIsLanding: useLanding, // 是不是靠落地页识别命中的
+      finalUrl,                         // 浏览器地址栏最终停留的那一步（你要求的行为）
+      recommendedUrl,                   // 推荐的"你要的真链接"（落地页最高分 + 含&优先）
+      recommendedIsLanding: useLanding,
       landingScore: landing?.landingScore ?? 0,
-      chain,                            // 精简后的跳转链（每一步只记 1 条，不再虚高）
-      params: recommendedParams,        // 优先从"真链接"解析参数
-      paramsFromFinalOnly: paramsFromUrl(finalUrl), // 兜底：最后一步的参数
+      chain,                            // 保留细粒度链（HTTP-3xx + HTML-parse）
+      browserChain,                     // 新增：浏览器模拟链路（followed-HTTP + AppScheme→H5-fallback 等）
+      params: recommendedParams,
+      paramsFromFinalOnly: paramsFromUrl(finalUrl),
     });
   } catch (e) {
     const msg = e.name === 'AbortError' ? '请求超时，短链服务器响应过慢' : (e.message || '未知错误');
-    return errJson(`展开失败: ${msg}`, 500);
+    return errJson(`转换失败: ${msg}`, 500);
   }
 }
