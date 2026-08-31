@@ -1,5 +1,10 @@
 // Cloudflare Pages Functions: GET /api/expand?url=<短链>
 // Workers runtime - 仅使用标准 fetch / Web 标准 API
+//
+// v2 优化：单遍遍历完成全部跳转跟踪（v1 串行跑了两遍同样的循环，浪费一半时间）
+// - 用 redirect:'follow' 让 HTTP 3xx 自动跟随，减少 fetch 次数
+// - 每拿到一个 HTML 就解析下一步跳转，同时记录 chain + landing 信息
+// - 不再串行跑两遍
 
 const MAX_RECURSION = 10;     // 浏览器模拟链路步数上限（含 HTML-parse 二跳）
 const REQUEST_TIMEOUT_MS = 18000;
@@ -257,15 +262,7 @@ function extractBrowserNextUrls(html, baseUrl) {
 }
 
 /**
- * 【你要的效果】模拟浏览器实际打开短链时的最终 URL：
- *   1. HTTP 3xx 全部自动跟随（redirect:'follow'，相当于浏览器地址栏的跳转）
- *   2. 如果跟随结束后拿到的是 200 HTML：
- *      2.1 从 HTML 中用 extractBrowserNextUrls 抓下一步要跳的地址
- *      2.2 如果是 App 自定义 scheme，用 fallbackForAppScheme 转 H5
- *      2.3 再把这个地址当作新的短链，递归处理
- *   3. 直到没有下一步或达到 MAX_RECURSION
- *   4. 如果某一步停在错误页（err.* / 404 路径 / error*），回退到"已经访问过的最高落地页分的 URL"
- * 最终返回 { finalUrl, chain }。
+ * 判断 URL 是否属于错误页 / 404 页
  */
 function looksLikeErrorPage(urlObjOrStr) {
   let url;
@@ -279,29 +276,35 @@ function looksLikeErrorPage(urlObjOrStr) {
     (path.includes('error') && url.searchParams.get('c') === '404')
   );
 }
-async function simulateBrowserExpand(initialUrl) {
+
+/**
+ * 【单遍遍历 v2】合并原 simulateBrowserExpand（阶段 A）和手动链路（阶段 B）。
+ *
+ * 使用 redirect:'follow' 让浏览器级自动跟随所有 HTTP 3xx（减少 fetch 次数），
+ * 每拿到一个 HTML 响应就解析下一步跳转，同时记录 chain + 落地页信息。
+ *
+ * 返回：
+ *   { finalUrl, chain, landing }
+ *   - finalUrl: 浏览器地址栏最终停留的 URL
+ *   - chain:    每一跳详情 [{ url, status, via, landingScore, isLanding, reasons }]
+ *   - landing:  { url, score, params } 链路上落地页分最高的那条
+ */
+async function expandSinglePass(initialUrl) {
   const chain = [];
   const visited = new Set();
-  const seenForDedupe = []; // {url, score}  — 用来回退
+  const scoredUrls = []; // { url, score } — 用于错误页回退
   let currentUrl = initialUrl;
   let lastHtml = null;
   let lastHtmlBase = null;
-
-  const pushAndRemember = (entry) => {
-    chain.push(entry);
-    try {
-      const s = scoreLandingPage(new URL(entry.url)).score;
-      seenForDedupe.push({ url: entry.url, score: s });
-    } catch (_) {}
-  };
+  let landing = null; // 当前链路上最高落地页分的条目
 
   for (let hops = 0; hops < MAX_RECURSION; hops++) {
     if (visited.has(currentUrl)) break;
     visited.add(currentUrl);
 
-    // A. 先跟完所有 HTTP 3xx（浏览器自动跟）
+    // A. 跟完所有 HTTP 3xx（浏览器自动跟）
     const resp = await fetchWithTimeout(currentUrl, {
-      redirect: 'follow', // 关键：浏览器级自动跟随，不手动处理 3xx
+      redirect: 'follow',
       headers: {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -326,10 +329,32 @@ async function simulateBrowserExpand(initialUrl) {
       if (nextCandidates.length > 0) via = 'followed+HTML-parse';
     }
 
-    pushAndRemember({ url: stoppedUrl, status: resp.status, via });
+    // 计算落地页分、记录链路
+    let stepScore = 0, stepReasons = [];
+    try {
+      const r = scoreLandingPage(new URL(stoppedUrl));
+      stepScore = r.score;
+      stepReasons = r.reasons;
+    } catch (_) {}
+
+    const isLanding = stepScore >= 18;
+    const stepInfo = {
+      url: stoppedUrl,
+      status: resp.status,
+      via,
+      landingScore: stepScore,
+      isLanding,
+      reasons: stepReasons,
+    };
+    chain.push(stepInfo);
+    scoredUrls.push({ url: stoppedUrl, score: stepScore });
+
+    if (!landing || stepScore > landing.score) {
+      landing = { url: stoppedUrl, score: stepScore, params: paramsFromUrl(stoppedUrl) };
+    }
 
     if (nextCandidates.length === 0) {
-      // B. 走到了一个非 HTML（如 JSON/图片）或者 HTML 里找不到任何下一跳 → 就停在 stoppedUrl
+      // B. 没有更多跳转 → 就停在 stoppedUrl
       currentUrl = stoppedUrl;
       break;
     }
@@ -355,7 +380,17 @@ async function simulateBrowserExpand(initialUrl) {
       }).sort((a, b) => b.s - a.s);
       const finalPick = scored[0].u;
       if (!visited.has(finalPick)) {
-        pushAndRemember({ url: finalPick, status: 200, via: 'AppScheme→H5-fallback' });
+        visited.add(finalPick);
+        let s = 0;
+        try { s = scoreLandingPage(new URL(finalPick)).score; } catch (_) {}
+        chain.push({
+          url: finalPick, status: 200, via: 'AppScheme→H5-fallback',
+          landingScore: s, isLanding: s >= 18, reasons: [],
+        });
+        scoredUrls.push({ url: finalPick, score: s });
+        if (!landing || s > landing.score) {
+          landing = { url: finalPick, score: s, params: paramsFromUrl(finalPick) };
+        }
         currentUrl = finalPick;
       }
     }
@@ -363,16 +398,19 @@ async function simulateBrowserExpand(initialUrl) {
 
   // D. 终极兜底：如果 currentUrl 是错误页 / 404 页，回退到链路上"落地页分最高的那个"
   //    这就是你在真实浏览器场景里遇到 error1.html 时会做的：点返回，用上一步的 iframe src 页面
-  if (looksLikeErrorPage(currentUrl) && seenForDedupe.length > 1) {
-    const sorted = [...seenForDedupe].sort((a, b) => b.score - a.score);
+  if (looksLikeErrorPage(currentUrl) && scoredUrls.length > 1) {
+    const sorted = [...scoredUrls].sort((a, b) => b.score - a.score);
     const fallback = sorted.find((c) => !looksLikeErrorPage(c.url) && c.url !== currentUrl);
     if (fallback) {
-      pushAndRemember({ url: fallback.url, status: 200, via: 'ErrorPage→Fallback' });
+      chain.push({
+        url: fallback.url, status: 200, via: 'ErrorPage→Fallback',
+        landingScore: fallback.score, isLanding: fallback.score >= 18, reasons: [],
+      });
       currentUrl = fallback.url;
     }
   }
 
-  return { finalUrl: currentUrl, chain };
+  return { finalUrl: currentUrl, chain, landing };
 }
 
 function okJson(data) {
@@ -424,85 +462,16 @@ export async function onRequestGet(context) {
   }
 
   const initialUrl = parsedTarget.href;
-  const visited = new Set();
 
   try {
-    // ===== 阶段 A：走浏览器级模拟 — 这是你要的"放到浏览器打开后最终会在哪"的结果 =====
-    const { finalUrl: browserFinal, chain: browserChain } = await simulateBrowserExpand(initialUrl);
+    // ===== 单遍遍历：同时拿到 finalUrl + chain + landing =====
+    const { finalUrl, chain, landing } = await expandSinglePass(initialUrl);
 
-    // ===== 阶段 B：同时保留旧的细粒度 manual 链路（便于展示每一跳 via/score），
-    //              但从 browserFinal 继续往后扫一遍落地页分，最终推荐以 browserFinal 为准 =====
-    const chain = [];
-    let currentUrl = initialUrl;
-    let landing = null; // 当前发现的最高分落地页
-
-    for (let hops = 0; hops < MAX_RECURSION; hops++) {
-      if (visited.has(currentUrl)) break;
-      visited.add(currentUrl);
-
-      const resp = await fetchWithTimeout(currentUrl, {
-        redirect: 'manual',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        },
-      });
-      const status = resp.status;
-      let via = 'HTTP-direct';
-      let nextUrl = null;
-
-      // --- A. HTTP 3xx 重定向 ---
-      if (status >= 300 && status < 400) {
-        const loc = resp.headers.get('location');
-        if (loc) { try { nextUrl = new URL(loc, currentUrl).href; via = 'HTTP-3xx'; } catch (_) {} }
-      }
-
-      // --- B. 200 HTML 解析 DOM/JS 跳转（新 extractBrowserNextUrls 覆盖 meta+JS+scheme+属性+JSON） ---
-      const ct = resp.headers.get('content-type') || '';
-      const isHtml = /text\/html|application\/xhtml\+xml/i.test(ct);
-      if ((status === 200 || status === 304 || (status >= 400 && status < 500)) && isHtml) {
-        const html = await resp.text();
-        const candidates = extractBrowserNextUrls(html, currentUrl).filter(u => u !== currentUrl && !visited.has(u));
-        if (candidates.length > 0) {
-          nextUrl = candidates[0];
-          if (via === 'HTTP-direct') via = 'HTML-parse';
-        }
-      }
-
-      // ===== 给这步打分，记录是否是"疑似落地页" =====
-      let stepScore = 0, stepReasons = [];
-      try {
-        const r = scoreLandingPage(new URL(currentUrl));
-        stepScore = r.score; stepReasons = r.reasons;
-      } catch (_) {}
-      const isLanding = stepScore >= 18;
-      const stepInfo = {
-        url: currentUrl,
-        status,
-        via,
-        landingScore: stepScore,
-        isLanding,
-        reasons: stepReasons,
-      };
-      chain.push(stepInfo);
-
-      if (!landing || stepInfo.landingScore > landing.landingScore) {
-        landing = { ...stepInfo, params: paramsFromUrl(currentUrl) };
-      }
-
-      if (!nextUrl) break;
-      currentUrl = nextUrl;
-    }
-
-    // —— 核心：你说 finalUrl 应当 = 浏览器真正打开后停的最后一步（= browserFinal）——
-    //  不再以 HTTP 3xx 最后一步算 finalUrl。
-    const finalUrl = browserFinal;
-
-    // 推荐落地页：三条路取"落地页分最高的那个"，且排除明显是错误页/404的 URL
+    // ===== 推荐落地页：从 finalUrl 和 landing.url 里挑分数最高的 =====
+    //   （原 v1 会再跑一遍同样的循环来算这个，现在直接复用 expandSinglePass 的结果）
     const candidatesForReco = [
-      { url: finalUrl,                         label: '浏览器最终停留页' },
-      ...(landing && landing.url ? [{ url: landing.url, score: landing.landingScore, params: landing.params, label: '最高落地页分' }] : []),
+      { url: finalUrl, label: '浏览器最终停留页' },
+      ...(landing && landing.url ? [{ url: landing.url, score: landing.score, params: landing.params, label: '最高落地页分' }] : []),
     ];
     let best = null;
     for (const c of candidatesForReco) {
@@ -530,12 +499,11 @@ export async function onRequestGet(context) {
 
     return okJson({
       ok: true,
-      finalUrl,                         // 浏览器地址栏最终停留的那一步（你要求的行为）
+      finalUrl,                         // 浏览器地址栏最终停留的那一步
       recommendedUrl,                   // 推荐的"你要的真链接"（落地页最高分 + 含&优先）
       recommendedIsLanding: useLanding,
-      landingScore: landing?.landingScore ?? 0,
-      chain,                            // 保留细粒度链（HTTP-3xx + HTML-parse）
-      browserChain,                     // 新增：浏览器模拟链路（followed-HTTP + AppScheme→H5-fallback 等）
+      landingScore: landing?.score ?? 0,
+      chain,                            // 单遍链路（替代原 chain + browserChain）
       params: recommendedParams,
       paramsFromFinalOnly: paramsFromUrl(finalUrl),
     });

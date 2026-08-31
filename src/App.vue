@@ -424,6 +424,7 @@ async function expand() {
     if (!resp.ok || !data.ok) throw new Error(data.error || '请求失败')
     result.value = data
     const originalTrim = inputUrl.value.trim()
+    inputUrl.value = ''
     if (originalTrim.length > targetUrl.length + 4) {
       showToast('✅ 已识别链接，转换中…', 'success')
     }
