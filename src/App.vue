@@ -19,6 +19,16 @@
       </button>
       <button
         class="tab-btn"
+        :class="{ active: currentTab === 'addr' }"
+        role="tab"
+        :aria-selected="currentTab === 'addr'"
+        @click="currentTab = 'addr'"
+      >
+        <span class="tab-icon">📍</span>
+        <span class="tab-text">虚拟址</span>
+      </button>
+      <button
+        class="tab-btn"
         :class="{ active: currentTab === 'ban' }"
         role="tab"
         :aria-selected="currentTab === 'ban'"
@@ -165,7 +175,90 @@
       </div>
     </div>
 
-    <!-- ===== Tab 2: 查禁拍 ===== -->
+    <!-- ===== Tab 2: 虚拟址 ===== -->
+    <div v-show="currentTab === 'addr'">
+      <section class="card">
+        <h2 class="card-title"><span class="icon">📍</span> 信息配置</h2>
+
+        <div class="addr-field">
+          <label class="addr-label">固定地址</label>
+          <input v-model="addrForm.fixedAddress" type="text" placeholder="请输入固定地址（省市区/街道）" />
+        </div>
+
+        <div class="addr-field">
+          <label class="addr-label">手机尾号</label>
+          <input v-model="addrForm.tailNumber" type="text" maxlength="4" placeholder="请输入尾号（后 4 位）" />
+        </div>
+
+        <div class="addr-divider"></div>
+
+        <p class="addr-sub-label">额外功能</p>
+        <div class="addr-option-row">
+          <div class="addr-radio-group" role="radiogroup">
+            <button
+              class="addr-radio"
+              :class="{ active: addrForm.type === 'community' }"
+              @click="addrForm.type = 'community'"
+            >🏘 小区</button>
+            <button
+              class="addr-radio"
+              :class="{ active: addrForm.type === 'shop' }"
+              @click="addrForm.type = 'shop'"
+            >🏪 店铺</button>
+          </div>
+          <label class="addr-checkbox">
+            <input type="checkbox" v-model="addrForm.multiNumber" />
+            <span>多号（6 组）</span>
+          </label>
+        </div>
+      </section>
+
+      <button class="btn-primary addr-generate-btn" @click="generateRandomAddress">
+        🎲 生成地址
+      </button>
+
+      <div class="addr-result-list" v-if="addrResults.length > 0">
+        <section
+          v-for="(info, index) in addrResults"
+          :key="index"
+          class="card addr-result-card"
+        >
+          <div class="addr-result-header">
+            <span class="addr-result-index">NO.{{ index + 1 }}</span>
+            <button
+              class="btn-copy"
+              :class="{ copied: addrCopied[index] }"
+              @click="copyAddrInfo(index)"
+            >
+              {{ addrCopied[index] ? '✓ 已复制' : '📋 复制' }}
+            </button>
+          </div>
+          <div class="addr-result-row">
+            <span class="addr-result-prefix">姓名</span>
+            <span class="addr-result-val">{{ info.name }}</span>
+          </div>
+          <div class="addr-result-row">
+            <span class="addr-result-prefix">地址</span>
+            <span class="addr-result-val">{{ info.address }}</span>
+          </div>
+          <div class="addr-result-row">
+            <span class="addr-result-prefix">手机</span>
+            <span class="addr-result-val">{{ info.phone }}</span>
+          </div>
+        </section>
+
+        <button
+          v-if="addrResults.length > 1"
+          class="btn-primary addr-copy-all"
+          :class="{ copied: addrAllCopied }"
+          @click="copyAllAddrResults"
+        >
+          {{ addrAllCopied ? '✓ 已复制全部' : '📋 一键复制全部' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== Tab 3: 查禁拍 ===== -->
     <div v-show="currentTab === 'ban'">
       <section class="card">
         <h2 class="card-title"><span class="icon">🔍</span> 输入店铺名/关键词 查禁拍</h2>
@@ -294,6 +387,17 @@ const FUNCTIONS = [
 
 // ---------- Tab 状态 ----------
 const currentTab = ref('link')
+
+// ---------- 虚拟址：state ----------
+const addrForm = reactive({
+  fixedAddress: '',
+  tailNumber: '',
+  type: 'community',   // 'community' | 'shop'
+  multiNumber: false,
+})
+const addrResults = ref([])
+const addrCopied = reactive({})
+const addrAllCopied = ref(false)
 
 // ---------- 转链接：state ----------
 const inputUrl = ref('')
@@ -468,6 +572,97 @@ async function copy(text, key) {
 async function copyAllResults() {
   const text = multipleRendered.value.map((r) => r.url).join('\n')
   await copy(text, 'allResults')
+}
+
+// ---------- 虚拟址：生成 & 复制 ----------
+
+const ADDR_DATA = {
+  surnames: ['王','李','张','刘','陈','杨','赵','黄','周','吴','徐','孙','胡','朱','高','林','何','郭','马','罗','梁','宋','郑','谢','韩','唐','冯','于','董','萧','程','曹','袁','邓','许','傅','沈','曾','彭','吕','苏','卢','蒋','蔡','贾','丁','魏','薛','叶','阎','余'],
+  names: ['伟','芳','秀英','娜','敏','静','丽','强','磊','军','洋','勇','艳','杰','娟','涛','明','超','秀兰','霞','平','刚','华','桂','芳','蓉','秀梅','秀菊','秀珍','秀荣','秀华','秀云','秀玉','秀芬','秀英'],
+  community: ['阳光','花园','丽景','祥瑞','和谐','幸福','安康','富贵','宜居','温馨','家园','佳苑','华庭','雅苑','逸园','沁园','御园','尚城','名城','世家','公馆','国际','中心','广场','天地','时代','未来','梦想','星光','月光','春风','夏雨','秋实','冬韵','山水','湖景','海景','公园','森林','绿地'],
+  shopAdj: ['新','好','优','佳','美','顺','兴','盛','昌','隆','福','禄','寿','喜','吉','祥','瑞','泰','安','康','宏','发','达','旺','福','贵','富','豪','雅','尚'],
+  shopTypes: ['便利店','生鲜超市','服装店','鞋靴店','箱包店','美妆护肤品店','饰品店','文具店','书店','玩具店','母婴用品店','家电专卖店','手机数码店','眼镜店','药店','咖啡店','奶茶店','面包烘焙店','面馆','火锅店','快餐店','水果店','鲜花店','宠物店','理发店','美甲美睫店','干洗店','五金店','茶叶店','零食专营店'],
+  phonePrefixes: ['140','143','160','161','164'],
+}
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
+
+function generateRandomAddress() {
+  if (!addrForm.fixedAddress.trim()) {
+    showToast('请先填写固定地址', 'error')
+    return
+  }
+  if (!addrForm.tailNumber.trim()) {
+    showToast('请先填写手机尾号', 'error')
+    return
+  }
+
+  const count = addrForm.multiNumber ? 6 : 1
+  const list = []
+
+  for (let i = 0; i < count; i++) {
+    // 随机姓名（三字，确保名两个字不同）
+    const surname = pick(ADDR_DATA.surnames)
+    let n1, n2
+    do {
+      n1 = pick(ADDR_DATA.names)[0]
+      n2 = pick(ADDR_DATA.names)[0]
+    } while (n1 === n2)
+    const name = `${surname}${n1}${n2}`
+
+    // 随机地址
+    let address
+    if (addrForm.type === 'community') {
+      const cm = pick(ADDR_DATA.community)
+      const building = 1 + Math.floor(Math.random() * 50)
+      const floor = 1 + Math.floor(Math.random() * 30)
+      const unit = 1 + Math.floor(Math.random() * 20)
+      const house = `${floor}${String(unit).padStart(2, '0')}`
+      address = `${addrForm.fixedAddress} ${cm}小区${building}号楼${house}室`
+    } else {
+      let c1, c2
+      do {
+        c1 = pick(ADDR_DATA.shopAdj)
+        c2 = pick(ADDR_DATA.shopAdj)
+      } while (c1 === c2)
+      const type = pick(ADDR_DATA.shopTypes)
+      address = `${addrForm.fixedAddress} ${c1}${c2}${type}`
+    }
+
+    // 随机手机号
+    const prefix = pick(ADDR_DATA.phonePrefixes)
+    const middle = 1000 + Math.floor(Math.random() * 9000)
+    const phone = `${prefix}${middle}${addrForm.tailNumber}`
+
+    // 去重检查
+    const dup = list.some(x => x.name === name || x.address === address || x.phone === phone)
+    if (dup) { i--; continue }
+
+    list.push({ name, address, phone })
+  }
+
+  addrResults.value = list
+  // 重置复制状态
+  for (const k of Object.keys(addrCopied)) delete addrCopied[k]
+  addrAllCopied.value = false
+  showToast(`✅ 已生成 ${list.length} 组虚拟信息`, 'success')
+}
+
+async function copyAddrInfo(index) {
+  const info = addrResults.value[index]
+  const text = `姓名：${info.name}\n地址：${info.address}\n手机号：${info.phone}`
+  await copy(text, `addr_${index}`)
+  addrCopied[index] = true
+  setTimeout(() => { delete addrCopied[index] }, 1600)
+}
+
+async function copyAllAddrResults() {
+  const text = addrResults.value.map((info, i) => {
+    return `NO.${i + 1}  姓名：${info.name}\n地址：${info.address}\n手机号：${info.phone}`
+  }).join('\n\n')
+  await copy(text, 'addr_all')
+  addrAllCopied.value = true
+  setTimeout(() => { addrAllCopied.value = false }, 1600)
 }
 
 function showToast(msg, type = 'success') {

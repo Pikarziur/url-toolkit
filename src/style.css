@@ -710,6 +710,152 @@ input:focus, textarea:focus {
 }
 
 /* =========================================================
+ * 虚拟址（地址生成）专属样式
+ * ========================================================= */
+.addr-field {
+  margin-bottom: 14px;
+}
+.addr-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-sub);
+  margin-bottom: 6px;
+}
+.addr-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 16px 0;
+}
+.addr-sub-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-sub);
+  margin-bottom: 10px;
+}
+.addr-option-row {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.addr-radio-group {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.addr-radio {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-sub);
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+.addr-radio:hover {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+.addr-radio.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary), #ec4899);
+  border-color: transparent;
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--primary) 60%, transparent);
+}
+.addr-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+.addr-checkbox:hover {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+.addr-checkbox input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.addr-generate-btn {
+  width: 100%;
+  margin-bottom: 20px;
+  font-size: 15px;
+  padding: 14px 20px;
+  min-height: 48px;
+  background: linear-gradient(135deg, var(--primary), #ec4899);
+  border: none;
+  border-radius: 12px;
+}
+
+.addr-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.addr-result-card {
+  padding: 18px 20px;
+}
+.addr-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.addr-result-index {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 0.5px;
+}
+.addr-result-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  align-items: flex-start;
+  min-width: 0;
+}
+.addr-result-row:last-child { margin-bottom: 0; }
+.addr-result-prefix {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--text-sub);
+  min-width: 32px;
+}
+.addr-result-val {
+  color: var(--text);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  flex: 1;
+}
+.addr-copy-all {
+  width: 100%;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+/* =========================================================
  * 移动端适配（手机端 / 平板小屏）
  * 断点：< 860px 进入单列，< 480px 额外收紧
  * ========================================================= */
