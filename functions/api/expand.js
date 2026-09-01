@@ -6,8 +6,11 @@
 // - 每拿到一个 HTML 就解析下一步跳转，同时记录 chain + landing 信息
 // - 不再串行跑两遍
 
-const MAX_RECURSION = 10;     // 浏览器模拟链路步数上限（含 HTML-parse 二跳）
-const REQUEST_TIMEOUT_MS = 18000;
+const MAX_RECURSION = 6;     // 电商短链实际 3-5 步就到真实页，10 是浪费
+const REQUEST_TIMEOUT_MS = 8000;  // 18s 太长了，真的被淘宝挑战等再久也没用
+
+// 落地页分阈值：命中即停止循环（真实商品页 score 通常 50~80）
+const LANDING_SCORE_EARLY_OUT = 30;
 
 // —— 常见电商自定义 scheme → https 落地页的回跳映射 ——
 // 当浏览器级链路最后一步停留在 taobao:// / tbopen:// 这类 App 唤起协议时，
@@ -278,16 +281,10 @@ function looksLikeErrorPage(urlObjOrStr) {
 }
 
 /**
- * 【单遍遍历 v2】合并原 simulateBrowserExpand（阶段 A）和手动链路（阶段 B）。
- *
- * 使用 redirect:'follow' 让浏览器级自动跟随所有 HTTP 3xx（减少 fetch 次数），
- * 每拿到一个 HTML 响应就解析下一步跳转，同时记录 chain + 落地页信息。
- *
- * 返回：
- *   { finalUrl, chain, landing }
- *   - finalUrl: 浏览器地址栏最终停留的 URL
- *   - chain:    每一跳详情 [{ url, status, via, landingScore, isLanding, reasons }]
- *   - landing:  { url, score, params } 链路上落地页分最高的那条
+ * 【单遍遍历 v3】v2 基础上加：
+ *  - 每步耗时统计（暴露真实瓶颈是网络 RTT 还是 HTML 解析）
+ *  - HTML 体大小记录
+ *  - 返回 totalMs 让前端能显示总耗时
  */
 async function expandSinglePass(initialUrl) {
   const chain = [];
@@ -302,6 +299,7 @@ async function expandSinglePass(initialUrl) {
     if (visited.has(currentUrl)) break;
     visited.add(currentUrl);
 
+    const tFetch0 = Date.now();
     // A. 跟完所有 HTTP 3xx（浏览器自动跟）
     const resp = await fetchWithTimeout(currentUrl, {
       redirect: 'follow',
@@ -311,25 +309,12 @@ async function expandSinglePass(initialUrl) {
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       },
     });
+    const fetchMs = Date.now() - tFetch0;
     // fetch(redirect:'follow') 返回的 resp.url 就是浏览器地址栏里最终停的 URL
     const stoppedUrl = resp.url || currentUrl;
     if (!visited.has(stoppedUrl)) visited.add(stoppedUrl);
 
-    let via = 'followed-HTTP';
-    const ct = resp.headers.get('content-type') || '';
-    const isHtml = /text\/html|application\/xhtml\+xml/i.test(ct);
-    let nextCandidates = [];
-
-    if (isHtml && (resp.status === 200 || resp.status === 304 || resp.status === 404 || resp.status === 403)) {
-      const html = await resp.text();
-      lastHtml = html;
-      lastHtmlBase = stoppedUrl;
-      nextCandidates = extractBrowserNextUrls(html, stoppedUrl)
-        .filter(u => u !== stoppedUrl && u !== currentUrl && !visited.has(u));
-      if (nextCandidates.length > 0) via = 'followed+HTML-parse';
-    }
-
-    // 计算落地页分、记录链路
+    // —— 先算落地页分（在下载 HTML body 之前就做，避免白下载）——
     let stepScore = 0, stepReasons = [];
     try {
       const r = scoreLandingPage(new URL(stoppedUrl));
@@ -337,7 +322,46 @@ async function expandSinglePass(initialUrl) {
       stepReasons = r.reasons;
     } catch (_) {}
 
+    // 命中高分落地页 → 直接终止循环，不再 fetch 任何下一跳
+    // （真实商品页 score 通常 50~80，30 以下才有必要继续追跳转链）
     const isLanding = stepScore >= 18;
+    if (stepScore >= LANDING_SCORE_EARLY_OUT) {
+      chain.push({
+        url: stoppedUrl,
+        status: resp.status,
+        via: 'early-stop-landing',
+        landingScore: stepScore,
+        isLanding,
+        reasons: stepReasons,
+        fetchMs,
+        htmlSize: 0,
+        parseMs: 0,
+      });
+      if (!landing || stepScore > landing.score) {
+        landing = { url: stoppedUrl, score: stepScore, params: paramsFromUrl(stoppedUrl) };
+      }
+      break;
+    }
+
+    let via = 'followed-HTTP';
+    const ct = resp.headers.get('content-type') || '';
+    const isHtml = /text\/html|application\/xhtml\+xml/i.test(ct);
+    let nextCandidates = [];
+    let htmlSize = 0;
+    let parseMs = 0;
+
+    if (isHtml && (resp.status === 200 || resp.status === 304 || resp.status === 404 || resp.status === 403)) {
+      const tParse0 = Date.now();
+      const html = await resp.text();
+      htmlSize = html.length;
+      lastHtml = html;
+      lastHtmlBase = stoppedUrl;
+      nextCandidates = extractBrowserNextUrls(html, stoppedUrl)
+        .filter(u => u !== stoppedUrl && u !== currentUrl && !visited.has(u));
+      if (nextCandidates.length > 0) via = 'followed+HTML-parse';
+      parseMs = Date.now() - tParse0;
+    }
+
     const stepInfo = {
       url: stoppedUrl,
       status: resp.status,
@@ -345,6 +369,9 @@ async function expandSinglePass(initialUrl) {
       landingScore: stepScore,
       isLanding,
       reasons: stepReasons,
+      fetchMs,
+      htmlSize,
+      parseMs,
     };
     chain.push(stepInfo);
     scoredUrls.push({ url: stoppedUrl, score: stepScore });
@@ -386,6 +413,7 @@ async function expandSinglePass(initialUrl) {
         chain.push({
           url: finalPick, status: 200, via: 'AppScheme→H5-fallback',
           landingScore: s, isLanding: s >= 18, reasons: [],
+          fetchMs: 0, htmlSize: 0, parseMs: 0,
         });
         scoredUrls.push({ url: finalPick, score: s });
         if (!landing || s > landing.score) {
@@ -405,6 +433,7 @@ async function expandSinglePass(initialUrl) {
       chain.push({
         url: fallback.url, status: 200, via: 'ErrorPage→Fallback',
         landingScore: fallback.score, isLanding: fallback.score >= 18, reasons: [],
+        fetchMs: 0, htmlSize: 0, parseMs: 0,
       });
       currentUrl = fallback.url;
     }
@@ -448,6 +477,9 @@ function paramsFromUrl(url) {
   return out;
 }
 
+// 缓存 TTL：同一个短链 60 秒内重复请求直接命中缓存，跳过跳转链路
+const CACHE_TTL_SECONDS = 60;
+
 export async function onRequestGet(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -463,32 +495,39 @@ export async function onRequestGet(context) {
 
   const initialUrl = parsedTarget.href;
 
+  // ===== 缓存层：Cloudflare Workers 原生 Cache API，零配置 =====
+  const cacheKey = new Request('https://expand-cache.local/?u=' + encodeURIComponent(initialUrl), { method: 'GET' });
+  const cache = caches.default;
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    // 命中缓存 —— 直接返回，不计入后端耗时
+    return cached;
+  }
+
+  const t0 = Date.now();
   try {
     // ===== 单遍遍历：同时拿到 finalUrl + chain + landing =====
     const { finalUrl, chain, landing } = await expandSinglePass(initialUrl);
 
     // ===== 推荐落地页：从 finalUrl 和 landing.url 里挑分数最高的 =====
-    //   （原 v1 会再跑一遍同样的循环来算这个，现在直接复用 expandSinglePass 的结果）
     const candidatesForReco = [
       { url: finalUrl, label: '浏览器最终停留页' },
       ...(landing && landing.url ? [{ url: landing.url, score: landing.score, params: landing.params, label: '最高落地页分' }] : []),
     ];
     let best = null;
     for (const c of candidatesForReco) {
-      if (looksLikeErrorPage(c.url)) continue; // 错误页绝对不能当推荐结果
+      if (looksLikeErrorPage(c.url)) continue;
       let s = -Infinity, params = null;
       try {
         const r = scoreLandingPage(new URL(c.url));
         s = r.score;
         params = paramsFromUrl(c.url);
-        // 含 & 的链接在用户眼里就是"完整链接"，在同分下优先
         if (c.url.includes('&')) s += 6;
       } catch (_) {}
       if (!best || s > best.score) {
         best = { score: s, url: c.url, params };
       }
     }
-    // 如果以上候选全是错误页（极端情况），就退回 finalUrl，但 params 走 paramsFromFinalOnly（比 error 页那堆 query 有意义）
     if (!best) {
       const fallback = !looksLikeErrorPage(finalUrl) ? finalUrl : (landing?.url || finalUrl);
       best = { score: 0, url: fallback, params: paramsFromUrl(fallback) };
@@ -497,18 +536,43 @@ export async function onRequestGet(context) {
     const recommendedParams = best.params;
     const useLanding = recommendedUrl !== finalUrl;
 
-    return okJson({
+    const totalMs = Date.now() - t0;
+    const body = {
       ok: true,
-      finalUrl,                         // 浏览器地址栏最终停留的那一步
-      recommendedUrl,                   // 推荐的"你要的真链接"（落地页最高分 + 含&优先）
+      finalUrl,
+      recommendedUrl,
       recommendedIsLanding: useLanding,
       landingScore: landing?.score ?? 0,
-      chain,                            // 单遍链路（替代原 chain + browserChain）
+      chain,
       params: recommendedParams,
       paramsFromFinalOnly: paramsFromUrl(finalUrl),
+      totalMs,          // 总耗时（ms）
+      cached: false,
+    };
+
+    const resp = new Response(JSON.stringify(body), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
+        'Access-Control-Allow-Origin': '*',
+      },
     });
+
+    // 写入 Workers 缓存（60 秒）
+    context.waitUntil(cache.put(cacheKey, resp.clone()));
+
+    return resp;
   } catch (e) {
+    const totalMs = Date.now() - t0;
     const msg = e.name === 'AbortError' ? '请求超时，短链服务器响应过慢' : (e.message || '未知错误');
-    return errJson(`转换失败: ${msg}`, 500);
+    return new Response(JSON.stringify({ ok: false, error: `转换失败: ${msg}`, totalMs }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
   }
 }
