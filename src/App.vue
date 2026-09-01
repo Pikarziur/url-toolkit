@@ -78,7 +78,7 @@
               <span class="icon">{{ result.recommendedIsLanding ? '🪂' : '🎯' }}</span>
               {{ result.recommendedIsLanding ? '完整跳转结果（走完所有跳转的最后一步）' : '完整链接' }}
               <span v-if="result.totalMs != null" class="tag" style="margin-left: 8px; background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); font-size: 11px;">
-                ⏱ {{ result.totalMs }}ms{{ result.cached ? ' · 缓存命中' : '' }}
+                ⏱ {{ result.totalMs }}ms{{ result.cached ? ' · 缓存命中' : '' }}{{ result.fastMode ? ' · ⚡️极速' : '' }}
               </span>
             </h2>
             <p v-if="result.recommendedIsLanding" class="muted" style="margin-top: -8px; margin-bottom: 12px; font-size: 12px;">
