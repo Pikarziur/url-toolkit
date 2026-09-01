@@ -19,16 +19,6 @@
       </button>
       <button
         class="tab-btn"
-        :class="{ active: currentTab === 'addr' }"
-        role="tab"
-        :aria-selected="currentTab === 'addr'"
-        @click="currentTab = 'addr'"
-      >
-        <span class="tab-icon">📍</span>
-        <span class="tab-text">虚拟址</span>
-      </button>
-      <button
-        class="tab-btn"
         :class="{ active: currentTab === 'ban' }"
         role="tab"
         :aria-selected="currentTab === 'ban'"
@@ -37,6 +27,16 @@
         <span class="tab-icon">🛑</span>
         <span class="tab-text">查禁拍</span>
         <span v-if="banTotalLoaded > 0" class="tab-count">{{ banTotalLoaded }}</span>
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ active: currentTab === 'addr' }"
+        role="tab"
+        :aria-selected="currentTab === 'addr'"
+        @click="currentTab = 'addr'"
+      >
+        <span class="tab-icon">📍</span>
+        <span class="tab-text">虚拟址</span>
       </button>
     </div>
 
@@ -175,8 +175,80 @@
       </div>
     </div>
 
-    <!-- ===== Tab 2: 虚拟址 ===== -->
-    <div v-show="currentTab === 'addr'">
+    <!-- ===== Tab 2: 查禁拍 ===== -->
+    <div v-show="currentTab === 'ban'">
+      <section class="card">
+        <h2 class="card-title"><span class="icon">🔍</span> 输入店铺名/关键词 查禁拍</h2>
+        <p class="muted" style="margin-top: -6px; margin-bottom: 14px; font-size: 13px;">
+          实时搜索 <strong>{{ banTotalLoaded }}</strong> 条禁拍数据（{{ banSrcStats.anheng }} + {{ banSrcStats.error }} + {{ banSrcStats.long }}），匹配结果后标注来源
+        </p>
+        <div class="input-with-action ban-search-wrap">
+          <input
+            v-model="banKeyword"
+            type="text"
+            placeholder="输入店铺名称或任意字符片段，支持模糊匹配…"
+            spellcheck="false"
+            class="ban-search-input"
+          />
+          <button
+            v-if="banKeyword"
+            class="btn-ghost ban-clear-btn"
+            title="清空输入"
+            @click="banKeyword = ''"
+          >✕ 清空</button>
+        </div>
+
+        <!-- 搜索结果统计 -->
+        <div v-if="banKeyword.trim()" class="ban-stats">
+          <span class="badge" :class="{ 'badge-danger': banMatched.length > 0 }">
+            {{ banMatched.length > 0 ? `⚠️ 命中 ${banMatched.length} 条禁拍` : '✅ 未命中禁拍' }}
+          </span>
+          <span v-if="banMatched.length > 0" class="muted" style="font-size: 12.5px;">
+            共搜索 {{ banTotalLoaded }} 条，耗时 {{ banSearchTime }}ms
+          </span>
+        </div>
+      </section>
+
+      <!-- 命中结果列表 -->
+      <section v-if="banMatched.length > 0" class="card">
+        <h2 class="card-title"><span class="icon" style="color: var(--danger);">🚨</span> 命中的禁拍条目（{{ banMatched.length }}）</h2>
+        <ul class="ban-result-list">
+          <li
+            v-for="(item, idx) in banMatched"
+            :key="idx"
+            class="ban-result-item"
+          >
+            <span class="ban-text">{{ item.text }}</span>
+            <span
+              v-for="(src, sIdx) in item.sources"
+              :key="sIdx"
+              class="ban-src-tag"
+              :data-src="src"
+            >【{{ src }}】</span>
+            <button
+              class="btn-copy ban-copy-btn"
+              :class="{ copied: copied['ban_' + idx] }"
+              @click="copy(item.text, 'ban_' + idx)"
+            >{{ copied['ban_' + idx] ? '✓' : '📋' }}</button>
+          </li>
+        </ul>
+      </section>
+
+      <!-- 空状态：没输入 / 没命中 -->
+      <section v-else class="card" style="border-style: dashed;">
+        <div v-if="!banKeyword.trim()" class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          输入店铺名或关键词，实时查询是否属于禁拍
+        </div>
+        <div v-else class="empty-state" style="color: var(--success);">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+          关键词 <strong>「{{ banKeyword.trim() }}」</strong> 在所有禁拍库中<strong>未命中</strong> ✅
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== Tab 3: 虚拟址 ===== -->
+    <div v-show="currentTab === 'addr'" class="addr-panel">
       <section class="card">
         <h2 class="card-title"><span class="icon">📍</span> 信息配置</h2>
 
@@ -256,78 +328,6 @@
           {{ addrAllCopied ? '✓ 已复制全部' : '📋 一键复制全部' }}
         </button>
       </div>
-    </div>
-
-    <!-- ===== Tab 3: 查禁拍 ===== -->
-    <div v-show="currentTab === 'ban'">
-      <section class="card">
-        <h2 class="card-title"><span class="icon">🔍</span> 输入店铺名/关键词 查禁拍</h2>
-        <p class="muted" style="margin-top: -6px; margin-bottom: 14px; font-size: 13px;">
-          实时搜索 <strong>{{ banTotalLoaded }}</strong> 条禁拍数据（{{ banSrcStats.anheng }} + {{ banSrcStats.error }} + {{ banSrcStats.long }}），匹配结果后标注来源
-        </p>
-        <div class="input-with-action ban-search-wrap">
-          <input
-            v-model="banKeyword"
-            type="text"
-            placeholder="输入店铺名称或任意字符片段，支持模糊匹配…"
-            spellcheck="false"
-            class="ban-search-input"
-          />
-          <button
-            v-if="banKeyword"
-            class="btn-ghost ban-clear-btn"
-            title="清空输入"
-            @click="banKeyword = ''"
-          >✕ 清空</button>
-        </div>
-
-        <!-- 搜索结果统计 -->
-        <div v-if="banKeyword.trim()" class="ban-stats">
-          <span class="badge" :class="{ 'badge-danger': banMatched.length > 0 }">
-            {{ banMatched.length > 0 ? `⚠️ 命中 ${banMatched.length} 条禁拍` : '✅ 未命中禁拍' }}
-          </span>
-          <span v-if="banMatched.length > 0" class="muted" style="font-size: 12.5px;">
-            共搜索 {{ banTotalLoaded }} 条，耗时 {{ banSearchTime }}ms
-          </span>
-        </div>
-      </section>
-
-      <!-- 命中结果列表 -->
-      <section v-if="banMatched.length > 0" class="card">
-        <h2 class="card-title"><span class="icon" style="color: var(--danger);">🚨</span> 命中的禁拍条目（{{ banMatched.length }}）</h2>
-        <ul class="ban-result-list">
-          <li
-            v-for="(item, idx) in banMatched"
-            :key="idx"
-            class="ban-result-item"
-          >
-            <span class="ban-text">{{ item.text }}</span>
-            <span
-              v-for="(src, sIdx) in item.sources"
-              :key="sIdx"
-              class="ban-src-tag"
-              :data-src="src"
-            >【{{ src }}】</span>
-            <button
-              class="btn-copy ban-copy-btn"
-              :class="{ copied: copied['ban_' + idx] }"
-              @click="copy(item.text, 'ban_' + idx)"
-            >{{ copied['ban_' + idx] ? '✓' : '📋' }}</button>
-          </li>
-        </ul>
-      </section>
-
-      <!-- 空状态：没输入 / 没命中 -->
-      <section v-else class="card" style="border-style: dashed;">
-        <div v-if="!banKeyword.trim()" class="empty-state">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          输入店铺名或关键词，实时查询是否属于禁拍
-        </div>
-        <div v-else class="empty-state" style="color: var(--success);">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
-          关键词 <strong>「{{ banKeyword.trim() }}」</strong> 在所有禁拍库中<strong>未命中</strong> ✅
-        </div>
-      </section>
     </div>
 
     <!-- Toast -->

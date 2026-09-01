@@ -712,6 +712,10 @@ input:focus, textarea:focus {
 /* =========================================================
  * 虚拟址（地址生成）专属样式
  * ========================================================= */
+.addr-panel {
+  max-width: 760px;
+  margin: 0 auto;
+}
 .addr-field {
   margin-bottom: 14px;
 }
@@ -811,27 +815,29 @@ input:focus, textarea:focus {
   gap: 14px;
 }
 .addr-result-card {
-  padding: 18px 20px;
+  padding: 20px 24px;
+  font-size: 14.5px;
 }
 .addr-result-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
 .addr-result-index {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--primary);
   letter-spacing: 0.5px;
 }
 .addr-result-row {
   display: flex;
-  gap: 10px;
-  margin-bottom: 8px;
-  font-size: 14px;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 14.5px;
+  line-height: 1.55;
   align-items: flex-start;
   min-width: 0;
 }
@@ -840,7 +846,7 @@ input:focus, textarea:focus {
   flex-shrink: 0;
   font-weight: 700;
   color: var(--text-sub);
-  min-width: 32px;
+  min-width: 40px;
 }
 .addr-result-val {
   color: var(--text);
