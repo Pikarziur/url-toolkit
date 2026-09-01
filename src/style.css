@@ -41,6 +41,9 @@
 html, body {
   margin: 0;
   padding: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;   /* 兜底：任何元素撑爆时不让横向滚动出现 */
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
@@ -52,9 +55,12 @@ html, body {
 }
 
 #app {
+  width: 100%;
   max-width: 1100px;
   margin: 0 auto;
   padding: 32px 20px 60px;
+  padding-top: calc(32px + env(safe-area-inset-top));
+  padding-bottom: calc(60px + env(safe-area-inset-bottom));
 }
 
 button {
@@ -99,6 +105,8 @@ input:focus, textarea:focus {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;        /* 防止 flex 子元素被长文本撑爆 */
+  flex-wrap: wrap;     /* 标签太长时允许换到下一行 */
 }
 
 .card-title .icon {
@@ -199,7 +207,9 @@ input:focus, textarea:focus {
   font-family: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
   font-size: 13px;
   word-break: break-all;
+  overflow-wrap: anywhere;
   line-height: 1.55;
+  min-width: 0;   /* 允许代码文本在 flex 中收缩换行 */
 }
 
 .muted {
@@ -328,6 +338,7 @@ input:focus, textarea:focus {
   background: color-mix(in srgb, var(--primary) 4%, var(--card));
   font-size: 13px;
   align-items: center;
+  min-width: 0;            /* flex 容器防撑爆 */
 }
 .chain-step .idx {
   flex-shrink: 0;
@@ -348,13 +359,16 @@ input:focus, textarea:focus {
   font-size: 12px;
   color: var(--text);
   word-break: break-all;
+  min-width: 0;            /* flex 子元素能正确收缩换行 */
+  overflow-wrap: anywhere;
 }
 
 .input-with-action {
   display: flex;
   gap: 10px;
+  min-width: 0;           /* flex 容器防撑爆 */
 }
-.input-with-action input { flex: 1; }
+.input-with-action input { flex: 1; min-width: 0; }   /* input 在 flex 中能正确收缩 */
 
 .tpl-item {
   padding: 12px 14px;
@@ -409,6 +423,8 @@ input:focus, textarea:focus {
   background: color-mix(in srgb, var(--primary) 5%, var(--card));
   border: 1.5px solid color-mix(in srgb, var(--primary) 25%, var(--border));
   border-radius: 10px;
+  min-width: 0;               /* 防止 flex 子元素被长 URL 撑爆 */
+  overflow-wrap: anywhere;
 }
 .result-box .lbl {
   font-size: 12px;
@@ -419,7 +435,9 @@ input:focus, textarea:focus {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 13px;
   word-break: break-all;
+  overflow-wrap: anywhere;
   margin-bottom: 10px;
+  min-width: 0;               /* 允许长 URL 在 flex 中正确换行收缩 */
 }
 .result-box .foot {
   display: flex;
@@ -530,15 +548,18 @@ input:focus, textarea:focus {
   margin-bottom: 24px;
   background: var(--card);
   border: 1.5px solid var(--border);
-  border-radius: 999px;
+  border-radius: 14px;        /* 从 999px 胶囊改为更适合移动端的圆角（不撑爆） */
   box-shadow: var(--shadow);
   position: sticky;
   top: 10px;
   z-index: 100;
   backdrop-filter: blur(8px);
+  min-width: 0;               /* flex 容器防撑爆 */
+  width: 100%;                /* 明确占满父容器 */
 }
 .tab-btn {
   flex: 1;
+  min-width: 0;               /* 允许 tab-btn 在窄屏上收缩 */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -548,10 +569,16 @@ input:focus, textarea:focus {
   font-weight: 600;
   color: var(--text-sub);
   background: transparent;
-  border-radius: 999px;
+  border-radius: 12px;        /* 从 999px 改为 12px 适配 */
   border: 1.5px solid transparent;
   transition: all 0.22s cubic-bezier(.4,0,.2,1);
   position: relative;
+  white-space: nowrap;
+  overflow: hidden;            /* 防溢出 */
+}
+.tab-btn .tab-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tab-btn:hover {
@@ -630,6 +657,7 @@ input:focus, textarea:focus {
   border-radius: 10px;
   flex-wrap: wrap;
   transition: all 0.15s ease;
+  min-width: 0;                /* flex 容器防撑爆 */
 }
 .ban-result-item:hover {
   border-color: var(--danger);
@@ -689,8 +717,11 @@ input:focus, textarea:focus {
 /* ---- 平板 / 大屏手机 (480px ~ 859px) ---- */
 @media (max-width: 859px) {
   #app {
+    width: 100%;
     max-width: 100%;
     padding: 24px 14px 48px;
+    padding-top: calc(24px + env(safe-area-inset-top));
+    padding-bottom: calc(48px + env(safe-area-inset-bottom));
   }
   .header { margin-bottom: 20px; }
   .header h1 { font-size: 22px; }
@@ -743,7 +774,13 @@ input:focus, textarea:focus {
 @media (max-width: 479px) {
   html, body { font-size: 14px; }
 
-  #app { padding: 18px 12px 40px; }
+  #app {
+    width: 100%;
+    max-width: 100%;
+    padding: 18px 12px 40px;
+    padding-top: calc(18px + env(safe-area-inset-top));
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  }
 
   .header { margin-bottom: 16px; }
   .header h1 { font-size: 20px; letter-spacing: -0.01em; }
@@ -892,7 +929,13 @@ input:focus, textarea:focus {
 @media (max-width: 390px) {
   html, body { font-size: 13.5px; }
 
-  #app { padding: 14px 10px 32px; }
+  #app {
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 10px 32px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-bottom: calc(32px + env(safe-area-inset-bottom));
+  }
 
   .header { margin-bottom: 12px; }
   .header h1 {
