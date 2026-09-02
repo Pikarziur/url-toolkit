@@ -612,6 +612,31 @@ input:focus, textarea:focus {
 }
 
 /* ===== 查禁拍：搜索栏 & 结果 ===== */
+.ban-load-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: -6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  padding: 10px 14px;
+  border-radius: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.ban-reload-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 6px;
+  vertical-align: middle;
+}
+
 .ban-search-wrap {
   margin-bottom: 14px;
 }

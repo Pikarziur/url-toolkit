@@ -179,9 +179,26 @@
     <div v-show="currentTab === 'ban'">
       <section class="card">
         <h2 class="card-title"><span class="icon">🔍</span> 输入店铺名/关键词 查禁拍</h2>
-        <p class="muted" style="margin-top: -6px; margin-bottom: 14px; font-size: 13px;">
-          实时搜索 <strong>{{ banTotalLoaded }}</strong> 条禁拍数据（{{ banSrcStats.anheng }} + {{ banSrcStats.error }} + {{ banSrcStats.long }}），匹配结果后标注来源
+
+        <!-- 加载中 -->
+        <p v-if="banLoading" class="muted" style="margin-top: -6px; margin-bottom: 14px; font-size: 13px;">
+          ⏳ 正在从云端拉取禁拍数据库…
         </p>
+
+        <!-- 加载失败 -->
+        <div v-else-if="banLoadError" class="ban-load-error">
+          <span>❌ 数据加载失败：{{ banLoadError }}</span>
+          <button class="btn-ghost" @click="loadBanData" style="margin-left: 10px;">🔄 重试</button>
+        </div>
+
+        <!-- 已加载 -->
+        <template v-else>
+          <p class="muted" style="margin-top: -6px; margin-bottom: 14px; font-size: 13px;">
+            实时搜索 <strong>{{ banTotalLoaded }}</strong> 条禁拍数据（{{ banSrcStats.anheng }} + {{ banSrcStats.error }} + {{ banSrcStats.long }}）
+            <button class="btn-ghost ban-reload-btn" title="刷新数据" @click="loadBanData" style="margin-left: 6px;">🔄</button>
+          </p>
+        </template>
+
         <div class="input-with-action ban-search-wrap">
           <input
             v-model="banKeyword"
@@ -342,18 +359,53 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
-// ===== 引入 3 个 ban JSON 文件（Vite 原生支持直接 import JSON） =====
-import anhengList from '../ban/anheng.json'
-import errorList from '../ban/error.json'
-import longList from '../ban/long.json'
+// ===== 查禁拍数据：GitHub 加速链接（运行时 fetch） =====
+const BAN_URLS = {
+  anheng: 'https://gh-proxy.org/https://raw.githubusercontent.com/Pikarziur/Data/refs/heads/main/BanShop/anheng.json',
+  error:  'https://gh-proxy.org/https://raw.githubusercontent.com/Pikarziur/Data/refs/heads/main/BanShop/error.json',
+  long:   'https://gh-proxy.org/https://raw.githubusercontent.com/Pikarziur/Data/refs/heads/main/BanShop/long.json',
+}
 
-const BAN_SOURCES = [
-  { key: 'anheng', data: anhengList },
-  { key: 'error',  data: errorList },
-  { key: 'long',   data: longList },
-]
+const anhengList = ref([])
+const errorList  = ref([])
+const longList   = ref([])
+const banLoading = ref(false)
+const banLoadError = ref('')
+
+async function loadBanData() {
+  banLoading.value = true
+  banLoadError.value = ''
+  const entries = Object.entries(BAN_URLS)
+  try {
+    const results = await Promise.all(
+      entries.map(async ([key, url]) => {
+        const resp = await fetch(url, { cache: 'no-cache' })
+        if (!resp.ok) throw new Error(`${key} HTTP ${resp.status}`)
+        const json = await resp.json()
+        return [key, Array.isArray(json) ? json : []]
+      })
+    )
+    for (const [key, arr] of results) {
+      if (key === 'anheng') anhengList.value = arr
+      else if (key === 'error') errorList.value = arr
+      else if (key === 'long') longList.value = arr
+    }
+  } catch (e) {
+    banLoadError.value = e.message || '加载失败'
+  } finally {
+    banLoading.value = false
+  }
+}
+
+onMounted(loadBanData)
+
+const BAN_SOURCES = computed(() => [
+  { key: 'anheng', data: anhengList.value },
+  { key: 'error',  data: errorList.value },
+  { key: 'long',   data: longList.value },
+])
 
 // ---------- 固定功能配置：秒杀肥料 ----------
 const FUNCTIONS = [
@@ -415,12 +467,12 @@ const banKeyword = ref('')
 const banSearchTime = ref(0)
 
 const banSrcStats = computed(() => ({
-  anheng: anhengList.length,
-  error:  errorList.length,
-  long:   longList.length,
+  anheng: anhengList.value.length,
+  error:  errorList.value.length,
+  long:   longList.value.length,
 }))
 const banTotalLoaded = computed(() =>
-  anhengList.length + errorList.length + longList.length
+  anhengList.value.length + errorList.value.length + longList.value.length
 )
 
 /**
