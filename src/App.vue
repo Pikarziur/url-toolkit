@@ -26,7 +26,6 @@
       >
         <span class="tab-icon">🛑</span>
         <span class="tab-text">查禁拍</span>
-        <span v-if="banTotalLoaded > 0" class="tab-count">{{ banTotalLoaded }}</span>
       </button>
       <button
         class="tab-btn"
