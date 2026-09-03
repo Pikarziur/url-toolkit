@@ -489,7 +489,7 @@ const banMatched = computed(() => {
   const t0 = performance.now()
   // 用 Map 按"条目文本"聚合来源，避免同一条目在多个库命中时重复显示
   const map = new Map()
-  for (const src of BAN_SOURCES) {
+  for (const src of BAN_SOURCES.value) {
     for (const item of src.data) {
       if (!item) continue
       const s = String(item)
