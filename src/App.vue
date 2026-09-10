@@ -9,16 +9,6 @@
     <div class="tab-bar" role="tablist">
       <button
         class="tab-btn"
-        :class="{ active: currentTab === 'link' }"
-        role="tab"
-        :aria-selected="currentTab === 'link'"
-        @click="currentTab = 'link'"
-      >
-        <span class="tab-icon">🔗</span>
-        <span class="tab-text">转链接</span>
-      </button>
-      <button
-        class="tab-btn"
         :class="{ active: currentTab === 'ban' }"
         role="tab"
         :aria-selected="currentTab === 'ban'"
@@ -36,6 +26,16 @@
       >
         <span class="tab-icon">📍</span>
         <span class="tab-text">虚拟址</span>
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ active: currentTab === 'link' }"
+        role="tab"
+        :aria-selected="currentTab === 'link'"
+        @click="currentTab = 'link'"
+      >
+        <span class="tab-icon">🔗</span>
+        <span class="tab-text">转链接</span>
       </button>
     </div>
 
@@ -177,10 +177,15 @@
     <!-- ===== Tab 2: 查禁拍 ===== -->
     <div v-show="currentTab === 'ban'">
       <section class="card">
-        <h2 class="card-title"><span class="icon">🔍</span> 输入店铺名/关键词 查禁拍</h2>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+          <h2 class="card-title" style="margin-bottom: 0;"><span class="icon">🔍</span> 输入店铺名/关键词 查禁拍</h2>
+          <button class="btn-primary" @click="banDialogVisible = true" style="padding: 8px 14px; font-size: 13px;">
+            ➕ 自定义店铺
+          </button>
+        </div>
 
         <!-- 加载中 -->
-        <p v-if="banLoading" class="muted" style="margin-top: -6px; margin-bottom: 14px; font-size: 13px;">
+        <p v-if="banLoading" class="muted" style="margin-top: 10px; margin-bottom: 14px; font-size: 13px;">
           ⏳ 正在从云端拉取禁拍数据库…
         </p>
 
@@ -193,7 +198,7 @@
         <!-- 已加载 -->
         <template v-else>
           <p class="muted" style="margin-top: -6px; margin-bottom: 14px; font-size: 13px;">
-            实时搜索 <strong>{{ banTotalLoaded }}</strong> 条禁拍数据（{{ banSrcStats.anheng }} + {{ banSrcStats.error }} + {{ banSrcStats.long }}）
+            实时搜索 <strong>{{ banTotalLoaded }}</strong> 条禁拍数据（{{ banSrcStats.anheng }} + {{ banSrcStats.error }} + {{ banSrcStats.long }} + {{ banSrcStats.custom }}自定义）
             <button class="btn-ghost ban-reload-btn" title="刷新数据" @click="loadBanData" style="margin-left: 6px;">🔄</button>
           </p>
         </template>
@@ -240,7 +245,7 @@
               :key="sIdx"
               class="ban-src-tag"
               :data-src="src"
-            >【{{ src }}】</span>
+            >【{{ banSrcLabel(src) }}】</span>
             <button
               class="btn-copy ban-copy-btn"
               :class="{ copied: copied['ban_' + idx] }"
@@ -346,6 +351,45 @@
       </div>
     </div>
 
+    <!-- ===== 自定义店铺弹窗 ===== -->
+    <div v-if="banDialogVisible" class="modal-overlay" @click.self="closeBanDialog">
+      <div class="modal-card">
+        <div class="modal-head">
+          <span class="modal-title">➕ 添加自定义禁拍店铺</span>
+          <button class="modal-close" @click="closeBanDialog">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label>店铺名 / 关键词</label>
+            <input
+              v-model="banForm.text"
+              type="text"
+              placeholder="输入要禁拍的店铺名或关键词"
+              maxlength="200"
+              spellcheck="false"
+              @keyup.enter="submitBanCustom"
+            />
+          </div>
+          <div class="modal-field">
+            <label>验证密码</label>
+            <input
+              v-model="banForm.password"
+              type="password"
+              placeholder="请输入密码"
+              @keyup.enter="submitBanCustom"
+            />
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-ghost" @click="closeBanDialog">取消</button>
+          <button class="btn-primary" :disabled="banSubmitting || !banForm.text.trim() || !banForm.password.trim()" @click="submitBanCustom">
+            <span v-if="banSubmitting" class="spinner"></span>
+            <span v-else>确认添加</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast -->
     <div class="toast-stack">
       <transition-group name="list">
@@ -370,8 +414,14 @@ const BAN_URLS = {
 const anhengList = ref([])
 const errorList  = ref([])
 const longList   = ref([])
+const customList = ref([])
 const banLoading = ref(false)
 const banLoadError = ref('')
+
+// 弹窗状态
+const banDialogVisible = ref(false)
+const banForm = reactive({ text: '', password: '' })
+const banSubmitting = ref(false)
 
 async function loadBanData() {
   banLoading.value = true
@@ -384,9 +434,21 @@ async function loadBanData() {
         if (!resp.ok) throw new Error(`${key} HTTP ${resp.status}`)
         const json = await resp.json()
         return [key, Array.isArray(json) ? json : []]
-      })
+      }),
+      // 同时拉取自定义禁拍列表（KV）
+      (async () => {
+        try {
+          const resp = await fetch('/api/ban-custom', { cache: 'no-cache' })
+          if (resp.ok) {
+            const data = await resp.json()
+            customList.value = Array.isArray(data.list) ? data.list : []
+          }
+        } catch {
+          // 自定义数据加载失败不阻塞主流程
+        }
+      })()
     )
-    for (const [key, arr] of results) {
+    for (const [key, arr] of results.slice(0, 3)) {
       if (key === 'anheng') anhengList.value = arr
       else if (key === 'error') errorList.value = arr
       else if (key === 'long') longList.value = arr
@@ -404,6 +466,7 @@ const BAN_SOURCES = computed(() => [
   { key: 'anheng', data: anhengList.value },
   { key: 'error',  data: errorList.value },
   { key: 'long',   data: longList.value },
+  { key: 'custom', data: customList.value },
 ])
 
 // ---------- 固定功能配置：秒杀肥料 ----------
@@ -437,7 +500,7 @@ const FUNCTIONS = [
 ]
 
 // ---------- Tab 状态 ----------
-const currentTab = ref('link')
+const currentTab = ref('ban')
 
 // ---------- 虚拟址：state ----------
 const addrForm = reactive({
@@ -469,9 +532,10 @@ const banSrcStats = computed(() => ({
   anheng: anhengList.value.length,
   error:  errorList.value.length,
   long:   longList.value.length,
+  custom: customList.value.length,
 }))
 const banTotalLoaded = computed(() =>
-  anhengList.value.length + errorList.value.length + longList.value.length
+  anhengList.value.length + errorList.value.length + longList.value.length + customList.value.length
 )
 
 /**
@@ -511,6 +575,49 @@ const banMatched = computed(() => {
   banSearchTime.value = Math.round(performance.now() - t0)
   return out
 })
+
+function banSrcLabel(key) {
+  const map = { anheng: '安恒', error: '错误', long: '长库', custom: '自定义' }
+  return map[key] || key
+}
+
+function closeBanDialog() {
+  banDialogVisible.value = false
+  banForm.text = ''
+  banForm.password = ''
+}
+
+async function submitBanCustom() {
+  const text = banForm.text.trim()
+  const password = banForm.password.trim()
+  if (!text || !password) {
+    showToast('请输入店铺名和密码', 'error')
+    return
+  }
+  banSubmitting.value = true
+  try {
+    const resp = await fetch('/api/ban-custom', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': password,
+      },
+      body: JSON.stringify({ text }),
+    })
+    const data = await resp.json()
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || '添加失败', 'error')
+      return
+    }
+    customList.value = data.list || []
+    showToast('✅ 添加成功', 'success')
+    closeBanDialog()
+  } catch {
+    showToast('网络错误，请稍后重试', 'error')
+  } finally {
+    banSubmitting.value = false
+  }
+}
 
 // ---------- URL 提取 ----------
 function extractFirstUrl(text) {
