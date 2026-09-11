@@ -245,10 +245,13 @@
           <div v-else>
             <!-- 全选栏 -->
             <div class="ban-manage-bar">
-              <label class="ban-check-all">
-                <input type="checkbox" v-model="banSelectAll" />
-                <span>全选（已选 {{ banSelectedCount }} / {{ customList.length }}）</span>
-              </label>
+              <div class="ban-manage-left">
+                <button class="ban-toggle-all" @click="toggleBanSelectAll">
+                  {{ banSelectAll ? '取消全选' : '全选' }}
+                </button>
+                <button class="ban-toggle-all" @click="invertBanSelect">反选</button>
+                <span class="ban-selected-info muted" v-if="banSelectedCount > 0">已选 {{ banSelectedCount }} / {{ customList.length }}</span>
+              </div>
               <button
                 class="btn-danger ban-batch-del"
                 :disabled="banSelectedCount === 0 || banDeleting"
@@ -477,48 +480,92 @@ const banSubmitting = ref(false)
 const banManageMode = ref(false)
 const banSelected = ref([])
 const banDeleting = ref(false)
-const banSelectAll = computed({
-  get() {
-    return customList.value.length > 0 && banSelected.value.length === customList.value.length
-  },
-  set(val) {
-    banSelected.value = val ? [...customList.value] : []
-  },
-})
+const banSelectAll = computed(() =>
+  customList.value.length > 0 && banSelected.value.length === customList.value.length
+)
 const banSelectedCount = computed(() => banSelected.value.length)
 
-async function loadBanData() {
-  banLoading.value = true
-  banLoadError.value = ''
-  const entries = Object.entries(BAN_URLS)
+function toggleBanSelectAll() {
+  if (banSelectAll.value) {
+    banSelected.value = []
+  } else {
+    banSelected.value = [...customList.value]
+  }
+}
+function invertBanSelect() {
+  const set = new Set(banSelected.value)
+  banSelected.value = customList.value.filter(item => !set.has(item))
+}
+
+const BAN_CACHE_KEY = 'ban-shop-data-v1'
+const BAN_CACHE_TTL = 10 * 60 * 1000 // 10 分钟
+
+function loadBanCache() {
   try {
-    const results = await Promise.all(
-      entries.map(async ([key, url]) => {
-        const resp = await fetch(url, { cache: 'no-cache' })
-        if (!resp.ok) throw new Error(`${key} HTTP ${resp.status}`)
-        const json = await resp.json()
-        return [key, Array.isArray(json) ? json : []]
-      }),
-      // 同时拉取自定义禁拍列表（KV）
-      (async () => {
-        try {
-          const resp = await fetch('/api/ban-custom', { cache: 'no-cache' })
-          if (resp.ok) {
-            const data = await resp.json()
-            customList.value = Array.isArray(data.list) ? data.list : []
-          }
-        } catch {
-          // 自定义数据加载失败不阻塞主流程
+    const raw = localStorage.getItem(BAN_CACHE_KEY)
+    if (!raw) return null
+    const cached = JSON.parse(raw)
+    if (Date.now() - cached.ts > BAN_CACHE_TTL) return null
+    return cached
+  } catch { return null }
+}
+function saveBanCache(data) {
+  try {
+    localStorage.setItem(BAN_CACHE_KEY, JSON.stringify({ ...data, ts: Date.now() }))
+  } catch {}
+}
+
+function applyBanData(data) {
+  anhengList.value = data.anheng || []
+  errorList.value = data.error || []
+  longList.value = data.long || []
+  customList.value = data.custom || []
+}
+
+async function fetchBanNetworkData() {
+  const entries = Object.entries(BAN_URLS)
+  const results = await Promise.all(
+    entries.map(async ([key, url]) => {
+      const resp = await fetch(url)
+      if (!resp.ok) throw new Error(`${key} HTTP ${resp.status}`)
+      const json = await resp.json()
+      return [key, Array.isArray(json) ? json : []]
+    }),
+    (async () => {
+      try {
+        const resp = await fetch('/api/ban-custom')
+        if (resp.ok) {
+          const data = await resp.json()
+          return ['custom', Array.isArray(data.list) ? data.list : []]
         }
-      })()
-    )
-    for (const [key, arr] of results.slice(0, 3)) {
-      if (key === 'anheng') anhengList.value = arr
-      else if (key === 'error') errorList.value = arr
-      else if (key === 'long') longList.value = arr
-    }
+      } catch {}
+      return ['custom', []]
+    })()
+  )
+  const merged = {}
+  for (const [key, arr] of results) merged[key] = arr
+  return merged
+}
+
+async function loadBanData() {
+  // 1. 先读本地缓存 → 秒开
+  const cached = loadBanCache()
+  if (cached) {
+    applyBanData(cached)
+    banLoading.value = false
+  } else {
+    banLoading.value = true
+  }
+
+  // 2. 后台拉最新数据
+  try {
+    const data = await fetchBanNetworkData()
+    applyBanData(data)
+    saveBanCache(data)
+    banLoadError.value = ''
   } catch (e) {
-    banLoadError.value = e.message || '加载失败'
+    // 网络失败没关系，缓存已经展示了
+    if (!cached) banLoadError.value = e.message || '加载失败'
   } finally {
     banLoading.value = false
   }

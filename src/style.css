@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: light dark;
   --bg: #f5f5ff;
   --card: #ffffff;
@@ -44,7 +44,7 @@ html, body {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;   /* 兜底：任何元素撑爆时不让横向滚动出现 */
-  min-height: 100vh;
+  height: 100vh;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
@@ -126,12 +126,15 @@ input:focus, textarea:focus {
   font-weight: 500;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  box-sizing: border-box;
+  align-self: center;
+  white-space: nowrap;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-hover);
-  transform: translateY(-1px);
   box-shadow: var(--shadow-lg);
 }
 
@@ -145,6 +148,12 @@ input:focus, textarea:focus {
   color: var(--text-sub);
   padding: 8px 12px;
   border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  align-self: center;
+  white-space: nowrap;
 }
 
 .btn-ghost:hover {
@@ -158,6 +167,12 @@ input:focus, textarea:focus {
   color: var(--danger);
   padding: 6px 10px;
   font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  align-self: center;
+  white-space: nowrap;
 }
 
 .btn-danger:hover {
@@ -171,6 +186,12 @@ input:focus, textarea:focus {
   font-size: 13px;
   font-weight: 500;
   border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  align-self: center;
+  white-space: nowrap;
 }
 
 .btn-copy:hover {
@@ -671,7 +692,7 @@ input:focus, textarea:focus {
 .ban-src-breakdown.ban-load-error-inline .btn-ghost {
   padding: 2px 8px;
   font-size: 12px;
-  min-height: unset;
+  height: unset;
 }
 
 /* 操作按钮行（搜索框下面） */
@@ -695,9 +716,12 @@ input:focus, textarea:focus {
   align-self: center;
   line-height: 1.4;
   border: 1px solid transparent;
-  min-height: 40px;
+  height: 40px;
   box-sizing: border-box;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .ban-custom-btn {
@@ -759,27 +783,35 @@ input:focus, textarea:focus {
   border-bottom: 1px solid var(--border);
   flex-wrap: nowrap;
 }
-.ban-check-all {
-  display: inline-flex;
+.ban-manage-left {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-sub);
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
+  gap: 4px;
   min-width: 0;
   flex: 1 1 auto;
+  flex-wrap: nowrap;
 }
-.ban-check-all span {
+.ban-toggle-all {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+}
+.ban-toggle-all:hover {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.ban-selected-info {
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.ban-check-all input {
-  margin: 0;
-  accent-color: var(--primary);
-  flex-shrink: 0;
+  padding-left: 4px;
 }
 .ban-batch-del {
   padding: 7px 12px;
@@ -1058,7 +1090,7 @@ input:focus, textarea:focus {
   margin-bottom: 20px;
   font-size: 15px;
   padding: 14px 20px;
-  min-height: 48px;
+  height: 48px;
   background: linear-gradient(135deg, var(--primary), #ec4899);
   border: none;
   border-radius: 12px;
@@ -1176,7 +1208,7 @@ input:focus, textarea:focus {
   .ban-actions .ban-refresh {
     padding: 11px 10px;
     font-size: 13.5px;
-    min-height: 40px;
+    height: 40px;
     height: 40px;
     line-height: 1.4;
     display: inline-flex;
@@ -1227,20 +1259,20 @@ input:focus, textarea:focus {
   .btn-primary {
     padding: 11px 14px;
     font-size: 14px;
-    min-height: 44px;
+    height: 44px;
     justify-content: center;
   }
   .btn-ghost {
     padding: 9px 10px;
     font-size: 13px;
-    min-height: 36px;
+    height: 36px;
   }
   .ban-actions .ban-custom-btn,
   .ban-actions .ban-manage-btn,
   .ban-actions .ban-refresh {
     padding: 11px 10px;
     font-size: 13.5px;
-    min-height: 40px;
+    height: 40px;
     height: 40px;
     display: inline-flex;
     align-items: center;
@@ -1251,7 +1283,7 @@ input:focus, textarea:focus {
   .btn-copy {
     padding: 8px 12px;
     font-size: 13px;
-    min-height: 36px;
+    height: 36px;
   }
   .btn-danger {
     padding: 6px 8px;
@@ -1396,20 +1428,20 @@ input:focus, textarea:focus {
   .btn-primary {
     padding: 12px 14px;
     font-size: 14px;
-    min-height: 48px;
+    height: 48px;
     letter-spacing: 0.01em;
   }
   .btn-ghost {
     padding: 8px 10px;
     font-size: 12.5px;
-    min-height: 36px;
+    height: 36px;
   }
   .ban-actions .ban-custom-btn,
   .ban-actions .ban-manage-btn,
   .ban-actions .ban-refresh {
     padding: 10px 8px;
     font-size: 13px;
-    min-height: 38px;
+    height: 38px;
     height: 38px;
     line-height: 1.4;
     display: inline-flex;
@@ -1421,13 +1453,13 @@ input:focus, textarea:focus {
   .btn-copy {
     padding: 8px 10px;
     font-size: 12.5px;
-    min-height: 36px;
+    height: 36px;
   }
 
   input, textarea {
     padding: 11px 10px;
     font-size: 14px;
-    min-height: 44px;
+    height: 44px;
   }
 
   .input-with-action { gap: 10px; }
