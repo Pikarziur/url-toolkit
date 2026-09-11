@@ -1,8 +1,8 @@
 <template>
   <div>
     <div class="header">
-      <h1>🔗 链接工具箱</h1>
-      <p>转换链接 · 秒杀肥料 · 查禁拍 · 一键复制</p>
+      <h1>📦 快递回收工具</h1>
+      <p>查禁拍 · 虚拟地址 · 一键操作</p>
     </div>
 
     <!-- ===== 顶部 Tab 切换栏（强化视觉效果） ===== -->
@@ -227,7 +227,7 @@
         <!-- 操作按钮行（搜索框下面） -->
         <div class="ban-actions">
           <button class="btn-primary ban-custom-btn" @click="banDialogVisible = true">
-            ➕ 添加自定义
+            ➕ 自定义
           </button>
           <button
             class="btn-ghost ban-manage-btn"
@@ -244,7 +244,7 @@
         <!-- 管理模式：自定义列表 -->
         <div v-if="banManageMode" class="ban-manage-panel">
           <div v-if="customList.length === 0" class="ban-manage-empty muted">
-            还没有自定义禁拍条目，点「➕ 添加自定义」开始
+            还没有自定义禁拍条目，点「➕ 自定义」开始
           </div>
           <div v-else>
             <!-- 全选栏 -->
@@ -285,7 +285,7 @@
       </section>
 
       <!-- 命中结果列表 -->
-      <section v-if="!banManageMode && banMatched.length > 0" class="card ban-card">
+      <section v-if="banMatched.length > 0" class="card ban-card">
         <h2 class="card-title"><span class="icon" style="color: var(--danger);">🚨</span> 命中的禁拍条目（{{ banMatched.length }}）</h2>
         <ul class="ban-result-list">
           <li
@@ -310,7 +310,7 @@
       </section>
 
       <!-- 空状态：没输入 / 没命中 -->
-      <section v-else-if="!banManageMode" class="card ban-card ban-empty-card">
+      <section v-else class="card ban-card ban-empty-card">
         <div v-if="!banKeyword.trim()" class="empty-state">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
           输入店铺名，实时查询是否属于禁拍
@@ -409,7 +409,7 @@
     <div v-if="banDialogVisible" class="modal-overlay" @click.self="closeBanDialog">
       <div class="modal-card">
         <div class="modal-head">
-          <span class="modal-title">➕ 添加自定义禁拍店铺</span>
+          <span class="modal-title">➕ 自定义禁拍店铺</span>
           <button class="modal-close" @click="closeBanDialog">✕</button>
         </div>
         <div class="modal-body">
@@ -672,16 +672,23 @@ async function submitBanCustom() {
       },
       body: JSON.stringify({ text }),
     })
-    const data = await resp.json()
-    if (!resp.ok || !data.ok) {
+    let data = {}
+    try { data = await resp.json() } catch {}
+    if (!resp.ok) {
+      showToast(data.error || `请求失败（${resp.status}）`, 'error')
+      return
+    }
+    if (!data.ok) {
       showToast(data.error || '添加失败', 'error')
       return
     }
     customList.value = data.list || []
+    banTotalLoaded.value = (banTotalLoaded.value - banSrcStats.value.custom) + customList.value.length
+    banSrcStats.value.custom = customList.value.length
     showToast('✅ 添加成功', 'success')
     closeBanDialog()
   } catch {
-    showToast('网络错误，请稍后重试', 'error')
+    showToast('网络错误，请检查连接后重试', 'error')
   } finally {
     banSubmitting.value = false
   }
@@ -709,10 +716,14 @@ async function batchDeleteCustom() {
         },
         body: JSON.stringify({ text }),
       })
-      const data = await resp.json()
-      if (!resp.ok || !data.ok) {
-        showToast(`删除失败：${data.error || '未知错误'}`, 'error')
-        // 停止循环，但前面成功的已经删了
+      let data = {}
+      try { data = await resp.json() } catch {}
+      if (!resp.ok) {
+        showToast(data.error || `删除失败（${resp.status}）`, 'error')
+        break
+      }
+      if (!data.ok) {
+        showToast(data.error || '删除失败', 'error')
         break
       }
       customList.value = data.list || customList.value.filter(t => t !== text)
