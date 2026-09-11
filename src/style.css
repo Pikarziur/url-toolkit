@@ -614,14 +614,32 @@ input:focus, textarea:focus {
 /* ===== 查禁拍：搜索栏 & 结果 ===== */
 .ban-card { }
 
+/* 标题 + 统计行 */
 .ban-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 .ban-header .ban-title {
   margin-bottom: 0;
+  flex-shrink: 0;
+}
+.ban-header-stats {
+  font-size: 12.5px;
+  text-align: right;
+  min-width: 0;
+}
+.ban-header-stats .ban-total {
+  font-size: 14px;
+  color: var(--primary);
+  font-weight: 700;
+}
+.ban-stats-detail {
+  font-size: 11.5px;
+  color: var(--text-sub);
+  opacity: 0.75;
 }
 
 .ban-loading-tip {
@@ -644,32 +662,27 @@ input:focus, textarea:focus {
   min-width: 0;
 }
 
-/* 数据源统计（弱化：灰字小字，无彩色） */
-.ban-datasrc-subtle {
-  margin: 0 0 14px;
-  font-size: 12.5px;
-  color: var(--text-sub);
-  line-height: 1.7;
-  word-break: break-all;
-}
-.ban-refresh-mini {
-  padding: 1px 7px;
-  font-size: 11px;
-  line-height: 1.4;
-  border-radius: 5px;
-  margin-left: 3px;
-}
-
-/* 操作按钮行 */
+/* 操作按钮行（搜索框下面） */
 .ban-actions {
   display: flex;
   gap: 10px;
+  margin-top: 12px;
   margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 .ban-custom-btn {
-  padding: 9px 16px;
-  font-size: 13px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
   flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary), #7c3aed);
+  border: none;
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+.ban-custom-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--primary-hover), #6d28d9);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px -4px color-mix(in srgb, var(--primary) 70%, transparent);
 }
 .ban-manage-btn {
   padding: 9px 14px;
@@ -680,6 +693,11 @@ input:focus, textarea:focus {
   background: color-mix(in srgb, var(--primary) 10%, var(--card));
   color: var(--primary);
   border-color: var(--primary);
+}
+.ban-refresh {
+  padding: 9px 14px;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 /* 管理面板 */

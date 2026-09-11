@@ -27,6 +27,7 @@
         <span class="tab-icon">📍</span>
         <span class="tab-text">虚拟址</span>
       </button>
+      <!-- 转链接 Tab 暂时隐藏
       <button
         class="tab-btn"
         :class="{ active: currentTab === 'link' }"
@@ -37,9 +38,11 @@
         <span class="tab-icon">🔗</span>
         <span class="tab-text">转链接</span>
       </button>
+      -->
     </div>
 
-    <!-- ===== Tab 1: 转链接（原功能） ===== -->
+    <!-- ===== Tab 1: 转链接（原功能，暂时隐藏） ===== -->
+    <template v-if="false">
     <div v-show="currentTab === 'link'">
       <!-- 输入区 -->
       <section class="card">
@@ -173,13 +176,20 @@
         </div>
       </div>
     </div>
+    </template>
 
     <!-- ===== Tab 2: 查禁拍 ===== -->
     <div v-show="currentTab === 'ban'">
       <section class="card ban-card">
-        <!-- 标题行 -->
+        <!-- 标题 + 统计 行 -->
         <div class="ban-header">
           <h2 class="card-title ban-title"><span class="icon">🔍</span> 请输入店铺名查询</h2>
+          <template v-if="!banLoading && !banLoadError">
+            <span class="muted ban-header-stats">
+              共 <strong class="ban-total">{{ banTotalLoaded }}</strong> 条
+              <span class="ban-stats-detail">（anheng {{ banSrcStats.anheng }} · error {{ banSrcStats.error }} · long {{ banSrcStats.long }} · custom {{ banSrcStats.custom }}）</span>
+            </span>
+          </template>
         </div>
 
         <!-- 加载中 -->
@@ -193,13 +203,24 @@
           <button class="btn-ghost" @click="loadBanData">🔄 重试</button>
         </div>
 
-        <!-- 数据源统计（已加载）→ 弱化视觉 -->
-        <p v-else class="muted ban-datasrc-subtle">
-          共 {{ banTotalLoaded }} 条 · anheng {{ banSrcStats.anheng }} · error {{ banSrcStats.error }} · long {{ banSrcStats.long }} · custom {{ banSrcStats.custom }}
-          <button class="btn-ghost ban-refresh-mini" title="刷新数据" @click="loadBanData">🔄</button>
-        </p>
+        <!-- 搜索输入 -->
+        <div class="ban-search">
+          <input
+            v-model="banKeyword"
+            type="text"
+            placeholder="输入店铺名称…"
+            spellcheck="false"
+            class="ban-search-input"
+          />
+          <button
+            v-if="banKeyword"
+            class="btn-ghost ban-clear-btn"
+            title="清空输入"
+            @click="banKeyword = ''"
+          >✕ 清空</button>
+        </div>
 
-        <!-- 操作按钮行 -->
+        <!-- 操作按钮行（搜索框下面） -->
         <div class="ban-actions">
           <button class="btn-primary ban-custom-btn" @click="banDialogVisible = true">
             ➕ 添加自定义
@@ -210,6 +231,9 @@
             @click="toggleBanManage"
           >
             🛠 管理{{ banManageMode ? '中' : '' }}（{{ customList.length }}）
+          </button>
+          <button class="btn-ghost ban-refresh" title="刷新数据" @click="loadBanData">
+            🔄 刷新
           </button>
         </div>
 
@@ -243,23 +267,6 @@
               </li>
             </ul>
           </div>
-        </div>
-
-        <!-- 搜索输入 -->
-        <div class="ban-search">
-          <input
-            v-model="banKeyword"
-            type="text"
-            placeholder="输入店铺名称…"
-            spellcheck="false"
-            class="ban-search-input"
-          />
-          <button
-            v-if="banKeyword"
-            class="btn-ghost ban-clear-btn"
-            title="清空输入"
-            @click="banKeyword = ''"
-          >✕ 清空</button>
         </div>
 
         <!-- 搜索结果状态 -->
