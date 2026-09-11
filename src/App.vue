@@ -191,20 +191,16 @@
           </h2>
         </div>
 
-        <!-- 数据源细分（标题下面，左对齐，单行） -->
-        <p v-if="!banLoading && !banLoadError" class="ban-src-breakdown">
-          anheng：{{ banSrcStats.anheng }} · error：{{ banSrcStats.error }} · long：{{ banSrcStats.long }} · 自定义：{{ banSrcStats.custom }}
-        </p>
-
-        <!-- 加载中 -->
-        <p v-if="banLoading" class="muted ban-loading-tip">
-          ⏳ 正在从云端拉取禁拍数据库…
-        </p>
-
-        <!-- 加载失败 -->
-        <div v-else-if="banLoadError" class="ban-load-error">
-          <span>❌ 数据加载失败：{{ banLoadError }}</span>
-          <button class="btn-ghost" @click="loadBanData">🔄 重试</button>
+        <!-- 数据源细分 / 加载提示（固定高度，防止刷新时面板跳动） -->
+        <div class="ban-sub-row">
+          <p v-if="!banLoadError" class="ban-src-breakdown">
+            <template v-if="banLoading">⏳ 正在从云端拉取禁拍数据库…</template>
+            <template v-else>anheng：{{ banSrcStats.anheng }} · error：{{ banSrcStats.error }} · long：{{ banSrcStats.long }} · 自定义：{{ banSrcStats.custom }}</template>
+          </p>
+          <div v-else class="ban-src-breakdown ban-load-error-inline">
+            <span>❌ 数据加载失败：{{ banLoadError }}</span>
+            <button class="btn-ghost" @click="loadBanData">🔄 重试</button>
+          </div>
         </div>
 
         <!-- 搜索输入 -->
