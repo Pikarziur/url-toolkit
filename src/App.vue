@@ -180,9 +180,6 @@
         <!-- 标题行 -->
         <div class="ban-header">
           <h2 class="card-title ban-title"><span class="icon">🔍</span> 请输入店铺名查询</h2>
-          <button class="btn-primary ban-custom-btn" @click="banDialogVisible = true">
-            ➕ 添加自定义
-          </button>
         </div>
 
         <!-- 加载中 -->
@@ -196,17 +193,55 @@
           <button class="btn-ghost" @click="loadBanData">🔄 重试</button>
         </div>
 
-        <!-- 数据源统计（已加载） -->
-        <div v-else class="ban-datasrc">
-          <div class="ban-datasrc-pills">
-            <span class="ban-pill ban-pill-anheng">安恒 {{ banSrcStats.anheng }}</span>
-            <span class="ban-pill ban-pill-error">错误 {{ banSrcStats.error }}</span>
-            <span class="ban-pill ban-pill-long">长库 {{ banSrcStats.long }}</span>
-            <span class="ban-pill ban-pill-custom">自定义 {{ banSrcStats.custom }}</span>
+        <!-- 数据源统计（已加载）→ 弱化视觉 -->
+        <p v-else class="muted ban-datasrc-subtle">
+          共 {{ banTotalLoaded }} 条 · anheng {{ banSrcStats.anheng }} · error {{ banSrcStats.error }} · long {{ banSrcStats.long }} · custom {{ banSrcStats.custom }}
+          <button class="btn-ghost ban-refresh-mini" title="刷新数据" @click="loadBanData">🔄</button>
+        </p>
+
+        <!-- 操作按钮行 -->
+        <div class="ban-actions">
+          <button class="btn-primary ban-custom-btn" @click="banDialogVisible = true">
+            ➕ 添加自定义
+          </button>
+          <button
+            class="btn-ghost ban-manage-btn"
+            :class="{ active: banManageMode }"
+            @click="toggleBanManage"
+          >
+            🛠 管理{{ banManageMode ? '中' : '' }}（{{ customList.length }}）
+          </button>
+        </div>
+
+        <!-- 管理模式：自定义列表 -->
+        <div v-if="banManageMode" class="ban-manage-panel">
+          <div v-if="customList.length === 0" class="ban-manage-empty muted">
+            还没有自定义禁拍条目，点「➕ 添加自定义」开始
           </div>
-          <div class="ban-datasrc-foot">
-            <span class="muted">共 <strong class="ban-total">{{ banTotalLoaded }}</strong> 条</span>
-            <button class="btn-ghost ban-refresh" title="刷新数据" @click="loadBanData">🔄 刷新</button>
+          <div v-else>
+            <!-- 全选栏 -->
+            <div class="ban-manage-bar">
+              <label class="ban-check-all">
+                <input type="checkbox" v-model="banSelectAll" />
+                <span>全选（已选 {{ banSelectedCount }} / {{ customList.length }}）</span>
+              </label>
+              <button
+                class="btn-danger ban-batch-del"
+                :disabled="banSelectedCount === 0 || banDeleting"
+                @click="batchDeleteCustom"
+              >
+                {{ banDeleting ? '删除中…' : `🗑 删除选中 (${banSelectedCount})` }}
+              </button>
+            </div>
+            <!-- 自定义条目列表 -->
+            <ul class="ban-manage-list">
+              <li v-for="(item, idx) in customList" :key="idx" class="ban-manage-item">
+                <label class="ban-manage-check">
+                  <input type="checkbox" :value="item" v-model="banSelected" />
+                </label>
+                <span class="ban-manage-text">{{ item }}</span>
+              </li>
+            </ul>
           </div>
         </div>
 
@@ -239,7 +274,7 @@
       </section>
 
       <!-- 命中结果列表 -->
-      <section v-if="banMatched.length > 0" class="card ban-card">
+      <section v-if="!banManageMode && banMatched.length > 0" class="card ban-card">
         <h2 class="card-title"><span class="icon" style="color: var(--danger);">🚨</span> 命中的禁拍条目（{{ banMatched.length }}）</h2>
         <ul class="ban-result-list">
           <li
@@ -264,7 +299,7 @@
       </section>
 
       <!-- 空状态：没输入 / 没命中 -->
-      <section v-else class="card ban-card ban-empty-card">
+      <section v-else-if="!banManageMode" class="card ban-card ban-empty-card">
         <div v-if="!banKeyword.trim()" class="empty-state">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
           输入店铺名，实时查询是否属于禁拍
@@ -430,6 +465,20 @@ const banLoadError = ref('')
 const banDialogVisible = ref(false)
 const banForm = reactive({ text: '', password: '' })
 const banSubmitting = ref(false)
+
+// 管理模式状态
+const banManageMode = ref(false)
+const banSelected = ref([])
+const banDeleting = ref(false)
+const banSelectAll = computed({
+  get() {
+    return customList.value.length > 0 && banSelected.value.length === customList.value.length
+  },
+  set(val) {
+    banSelected.value = val ? [...customList.value] : []
+  },
+})
+const banSelectedCount = computed(() => banSelected.value.length)
 
 async function loadBanData() {
   banLoading.value = true
@@ -624,6 +673,45 @@ async function submitBanCustom() {
     showToast('网络错误，请稍后重试', 'error')
   } finally {
     banSubmitting.value = false
+  }
+}
+
+function toggleBanManage() {
+  banManageMode.value = !banManageMode.value
+  banSelected.value = []
+}
+
+async function batchDeleteCustom() {
+  if (banSelected.value.length === 0 || banDeleting.value) return
+  // 弹密码验证（删除密码，和添加密码分开）
+  const pwd = prompt(`⚠️ 即将删除 ${banSelected.value.length} 条自定义禁拍，输入【删除密码】确认：`)
+  if (!pwd) return
+  banDeleting.value = true
+  try {
+    // 逐条 DELETE（后端支持单条，也可以一次发多条）
+    for (const text of banSelected.value) {
+      const resp = await fetch('/api/ban-custom', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': pwd,
+        },
+        body: JSON.stringify({ text }),
+      })
+      const data = await resp.json()
+      if (!resp.ok || !data.ok) {
+        showToast(`删除失败：${data.error || '未知错误'}`, 'error')
+        // 停止循环，但前面成功的已经删了
+        break
+      }
+      customList.value = data.list || customList.value.filter(t => t !== text)
+    }
+    showToast(`✅ 已删除 ${banSelected.value.length} 条`, 'success')
+    banSelected.value = []
+  } catch {
+    showToast('网络错误，请稍后重试', 'error')
+  } finally {
+    banDeleting.value = false
   }
 }
 
