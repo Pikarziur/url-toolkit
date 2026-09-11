@@ -82,7 +82,7 @@ export async function onRequest(context) {
     }
 
     if (request.method === 'POST') {
-      if (!verifyPassword(request, env, 'add')) return errJson('添加密码错误', 401);
+      if (!verifyPassword(request, env, 'add')) return errJson('添加权限-密码错误', 401);
       let body;
       try { body = await request.json(); } catch { return errJson('请求体需为 JSON'); }
       const text = (body.text || '').trim();
@@ -97,7 +97,7 @@ export async function onRequest(context) {
     }
 
     if (request.method === 'DELETE') {
-      if (!verifyPassword(request, env, 'delete')) return errJson('删除密码错误', 401);
+      if (!verifyPassword(request, env, 'delete')) return errJson('删除权限-密码错误', 401);
       let body;
       try { body = await request.json(); } catch { return errJson('请求体需为 JSON'); }
       const text = (body.text || '').trim();
