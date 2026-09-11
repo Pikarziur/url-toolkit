@@ -457,11 +457,11 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 
-// ===== 查禁拍数据：GitHub 加速链接（运行时 fetch） =====
+// ===== 查禁拍数据：jsDelivr CDN（Cloudflare 全球加速，7 天刷新缓存） =====
 const BAN_URLS = {
-  anheng: 'https://gh-proxy.org/https://raw.githubusercontent.com/Pikarziur/Data/refs/heads/main/BanShop/anheng.json',
-  error:  'https://gh-proxy.org/https://raw.githubusercontent.com/Pikarziur/Data/refs/heads/main/BanShop/error.json',
-  long:   'https://gh-proxy.org/https://raw.githubusercontent.com/Pikarziur/Data/refs/heads/main/BanShop/long.json',
+  anheng: 'https://cdn.jsdelivr.net/gh/Pikarziur/Data@main/BanShop/anheng.json',
+  error:  'https://cdn.jsdelivr.net/gh/Pikarziur/Data@main/BanShop/error.json',
+  long:   'https://cdn.jsdelivr.net/gh/Pikarziur/Data@main/BanShop/long.json',
 }
 
 const anhengList = ref([])
@@ -497,7 +497,7 @@ function invertBanSelect() {
   banSelected.value = customList.value.filter(item => !set.has(item))
 }
 
-const BAN_CACHE_KEY = 'ban-shop-data-v1'
+const BAN_CACHE_KEY = 'ban-shop-data-v2'
 const BAN_CACHE_TTL = 10 * 60 * 1000 // 10 分钟
 
 function loadBanCache() {
