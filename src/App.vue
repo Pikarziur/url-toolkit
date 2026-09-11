@@ -176,38 +176,46 @@
 
     <!-- ===== Tab 2: 查禁拍 ===== -->
     <div v-show="currentTab === 'ban'">
-      <section class="card">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-          <h2 class="card-title" style="margin-bottom: 0;"><span class="icon">🔍</span> 输入店铺名/关键词 查禁拍</h2>
-          <button class="btn-primary" @click="banDialogVisible = true" style="padding: 8px 14px; font-size: 13px;">
-            ➕ 自定义店铺
+      <section class="card ban-card">
+        <!-- 标题行 -->
+        <div class="ban-header">
+          <h2 class="card-title ban-title"><span class="icon">🔍</span> 请输入店铺名查询</h2>
+          <button class="btn-primary ban-custom-btn" @click="banDialogVisible = true">
+            ➕ 添加自定义
           </button>
         </div>
 
         <!-- 加载中 -->
-        <p v-if="banLoading" class="muted" style="margin-top: 10px; margin-bottom: 14px; font-size: 13px;">
+        <p v-if="banLoading" class="muted ban-loading-tip">
           ⏳ 正在从云端拉取禁拍数据库…
         </p>
 
         <!-- 加载失败 -->
         <div v-else-if="banLoadError" class="ban-load-error">
           <span>❌ 数据加载失败：{{ banLoadError }}</span>
-          <button class="btn-ghost" @click="loadBanData" style="margin-left: 10px;">🔄 重试</button>
+          <button class="btn-ghost" @click="loadBanData">🔄 重试</button>
         </div>
 
-        <!-- 已加载 -->
-        <template v-else>
-          <p class="muted" style="margin-top: -6px; margin-bottom: 14px; font-size: 13px;">
-            实时搜索 <strong>{{ banTotalLoaded }}</strong> 条禁拍数据（{{ banSrcStats.anheng }} + {{ banSrcStats.error }} + {{ banSrcStats.long }} + {{ banSrcStats.custom }}自定义）
-            <button class="btn-ghost ban-reload-btn" title="刷新数据" @click="loadBanData" style="margin-left: 6px;">🔄</button>
-          </p>
-        </template>
+        <!-- 数据源统计（已加载） -->
+        <div v-else class="ban-datasrc">
+          <div class="ban-datasrc-pills">
+            <span class="ban-pill ban-pill-anheng">安恒 {{ banSrcStats.anheng }}</span>
+            <span class="ban-pill ban-pill-error">错误 {{ banSrcStats.error }}</span>
+            <span class="ban-pill ban-pill-long">长库 {{ banSrcStats.long }}</span>
+            <span class="ban-pill ban-pill-custom">自定义 {{ banSrcStats.custom }}</span>
+          </div>
+          <div class="ban-datasrc-foot">
+            <span class="muted">共 <strong class="ban-total">{{ banTotalLoaded }}</strong> 条</span>
+            <button class="btn-ghost ban-refresh" title="刷新数据" @click="loadBanData">🔄 刷新</button>
+          </div>
+        </div>
 
-        <div class="input-with-action ban-search-wrap">
+        <!-- 搜索输入 -->
+        <div class="ban-search">
           <input
             v-model="banKeyword"
             type="text"
-            placeholder="输入店铺名称或任意字符片段，支持模糊匹配…"
+            placeholder="输入店铺名称…"
             spellcheck="false"
             class="ban-search-input"
           />
@@ -219,19 +227,19 @@
           >✕ 清空</button>
         </div>
 
-        <!-- 搜索结果统计 -->
-        <div v-if="banKeyword.trim()" class="ban-stats">
-          <span class="badge" :class="{ 'badge-danger': banMatched.length > 0 }">
+        <!-- 搜索结果状态 -->
+        <div v-if="banKeyword.trim()" class="ban-result-status">
+          <span class="badge" :class="{ 'badge-danger': banMatched.length > 0, 'badge-success': banMatched.length === 0 }">
             {{ banMatched.length > 0 ? `⚠️ 命中 ${banMatched.length} 条禁拍` : '✅ 未命中禁拍' }}
           </span>
-          <span v-if="banMatched.length > 0" class="muted" style="font-size: 12.5px;">
-            共搜索 {{ banTotalLoaded }} 条，耗时 {{ banSearchTime }}ms
+          <span v-if="banMatched.length > 0" class="muted ban-search-time">
+            耗时 {{ banSearchTime }}ms
           </span>
         </div>
       </section>
 
       <!-- 命中结果列表 -->
-      <section v-if="banMatched.length > 0" class="card">
+      <section v-if="banMatched.length > 0" class="card ban-card">
         <h2 class="card-title"><span class="icon" style="color: var(--danger);">🚨</span> 命中的禁拍条目（{{ banMatched.length }}）</h2>
         <ul class="ban-result-list">
           <li
@@ -245,7 +253,7 @@
               :key="sIdx"
               class="ban-src-tag"
               :data-src="src"
-            >【{{ banSrcLabel(src) }}】</span>
+            >{{ banSrcLabel(src) }}</span>
             <button
               class="btn-copy ban-copy-btn"
               :class="{ copied: copied['ban_' + idx] }"
@@ -256,12 +264,12 @@
       </section>
 
       <!-- 空状态：没输入 / 没命中 -->
-      <section v-else class="card" style="border-style: dashed;">
+      <section v-else class="card ban-card ban-empty-card">
         <div v-if="!banKeyword.trim()" class="empty-state">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          输入店铺名或关键词，实时查询是否属于禁拍
+          输入店铺名，实时查询是否属于禁拍
         </div>
-        <div v-else class="empty-state" style="color: var(--success);">
+        <div v-else class="empty-state ban-empty-ok">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
           关键词 <strong>「{{ banKeyword.trim() }}」</strong> 在所有禁拍库中<strong>未命中</strong> ✅
         </div>
@@ -374,7 +382,7 @@
             <label>验证密码</label>
             <input
               v-model="banForm.password"
-              type="password"
+              type="text"
               placeholder="请输入密码"
               @keyup.enter="submitBanCustom"
             />
