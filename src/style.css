@@ -614,32 +614,35 @@ input:focus, textarea:focus {
 /* ===== 查禁拍：搜索栏 & 结果 ===== */
 .ban-card { }
 
-/* 标题 + 统计行 */
+/* 标题 + 总数 */
 .ban-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
 }
 .ban-header .ban-title {
   margin-bottom: 0;
-  flex-shrink: 0;
 }
-.ban-header-stats {
-  font-size: 12.5px;
-  text-align: right;
-  min-width: 0;
-}
-.ban-header-stats .ban-total {
-  font-size: 14px;
-  color: var(--primary);
-  font-weight: 700;
-}
-.ban-stats-detail {
-  font-size: 11.5px;
+.ban-total-inline {
+  font-size: 13px;
+  font-weight: 400;
   color: var(--text-sub);
-  opacity: 0.75;
+  margin-left: 4px;
+}
+.ban-total-inline .ban-total {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* 数据源细分：单行，与标题文字左对齐（跳过图标） */
+.ban-src-breakdown {
+  margin: 0 0 16px;
+  padding-left: 24px;
+  font-size: 12.5px;
+  color: var(--text-sub);
+  line-height: 1.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ban-loading-tip {
@@ -665,16 +668,22 @@ input:focus, textarea:focus {
 /* 操作按钮行（搜索框下面） */
 .ban-actions {
   display: flex;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 14px;
+  margin-top: 14px;
   margin-bottom: 14px;
-  flex-wrap: wrap;
+}
+.ban-custom-btn,
+.ban-manage-btn,
+.ban-refresh {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: center;
 }
 .ban-custom-btn {
-  padding: 10px 20px;
-  font-size: 14px;
   font-weight: 600;
-  flex-shrink: 0;
   background: linear-gradient(135deg, var(--primary), #7c3aed);
   border: none;
   box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--primary) 55%, transparent);
@@ -684,20 +693,10 @@ input:focus, textarea:focus {
   transform: translateY(-1px);
   box-shadow: 0 6px 18px -4px color-mix(in srgb, var(--primary) 70%, transparent);
 }
-.ban-manage-btn {
-  padding: 9px 14px;
-  font-size: 13px;
-  flex-shrink: 0;
-}
 .ban-manage-btn.active {
   background: color-mix(in srgb, var(--primary) 10%, var(--card));
   color: var(--primary);
   border-color: var(--primary);
-}
-.ban-refresh {
-  padding: 9px 14px;
-  font-size: 13px;
-  flex-shrink: 0;
 }
 
 /* 管理面板 */

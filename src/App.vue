@@ -181,16 +181,20 @@
     <!-- ===== Tab 2: 查禁拍 ===== -->
     <div v-show="currentTab === 'ban'">
       <section class="card ban-card">
-        <!-- 标题 + 统计 行 -->
+        <!-- 标题 + 总数 -->
         <div class="ban-header">
-          <h2 class="card-title ban-title"><span class="icon">🔍</span> 请输入店铺名查询</h2>
-          <template v-if="!banLoading && !banLoadError">
-            <span class="muted ban-header-stats">
-              共 <strong class="ban-total">{{ banTotalLoaded }}</strong> 条
-              <span class="ban-stats-detail">（anheng {{ banSrcStats.anheng }} · error {{ banSrcStats.error }} · long {{ banSrcStats.long }} · custom {{ banSrcStats.custom }}）</span>
-            </span>
-          </template>
+          <h2 class="card-title ban-title">
+            <span class="icon">🔍</span> 查询禁拍店铺
+            <template v-if="!banLoading && !banLoadError">
+              <span class="ban-total-inline">（共 <strong class="ban-total">{{ banTotalLoaded }}</strong> 条）</span>
+            </template>
+          </h2>
         </div>
+
+        <!-- 数据源细分（标题下面，左对齐，单行） -->
+        <p v-if="!banLoading && !banLoadError" class="ban-src-breakdown">
+          anheng：{{ banSrcStats.anheng }} · error：{{ banSrcStats.error }} · long：{{ banSrcStats.long }} · 自定义：{{ banSrcStats.custom }}
+        </p>
 
         <!-- 加载中 -->
         <p v-if="banLoading" class="muted ban-loading-tip">
