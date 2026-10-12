@@ -27,7 +27,6 @@
         <span class="tab-icon">📍</span>
         <span class="tab-text">虚拟址</span>
       </button>
-      <!-- 转链接 Tab 暂时隐藏
       <button
         class="tab-btn"
         :class="{ active: currentTab === 'link' }"
@@ -38,11 +37,10 @@
         <span class="tab-icon">🔗</span>
         <span class="tab-text">转链接</span>
       </button>
-      -->
     </div>
 
-    <!-- ===== Tab 1: 转链接（原功能，暂时隐藏） ===== -->
-    <template v-if="false">
+    <!-- ===== Tab 1: 转链接 ===== -->
+    <template v-if="true">
     <div v-show="currentTab === 'link'">
       <!-- 输入区 -->
       <section class="card">
@@ -129,7 +127,7 @@
                   </div>
                 </div>
                 <div class="tpl-body">
-                  将完整链接中的商品ID（itemIds/id/itemId）自动填入下方 {{ fn.links.length }} 条秒杀肥料链接中的 <code class="code">itemIds=商品</code>
+                  将完整链接中的商品ID（itemIds/id/itemId）自动填入下方 {{ fn.links.length }} 条秒杀肥料链接中的 <code class="code">itemIds=商品ID</code>
                 </div>
               </div>
             </div>
@@ -580,31 +578,39 @@ const BAN_SOURCES = computed(() => [
   { key: 'custom', data: customList.value },
 ])
 
-// ---------- 固定功能配置：秒杀肥料 ----------
+// ---------- 固定功能配置：秒杀肥料（tbms-cooperation 模板） ----------
 const FUNCTIONS = [
   {
     name: '秒杀肥料',
     icon: '🌱',
     links: [
       {
-        label: '6W',
-        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tjb-ssr/home?spma=mspd&spmb=qdmsxiadan&sceneId=7506&deliveryId=68206&itemIds=商品&spm=a2141.7631565.tbshopmod-photo_retouch.25',
+        label: '6w',
+        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tbms-cooperation/home?x-ssr=true&disableNav=YES&x-preload=true&disableProgress=true&forceThemis=true&x-sec=wua&spma=farm&spmb=46066528&hd_from_id=100085&bybtSceneId=babaFarmFertilizer&red_packet_channel=farmorder&sceneId=7506&deliveryId=68206&implId=other_1364_3194018_101097_0&fromToken=1wllqZLHQdGzL8G5t9BZfbN1VuDU1U2UOURUXU1U0Z&itemIds=商品ID&taskhubType=taskhubcc&taskFrom=wulengjing&sourceType=other&spm=a2141.7631571.tbshopmod-series_title_link.0&spm=a2141.7631565.tbshopmod-photo_retouch.1',
       },
       {
-        label: '5W',
-        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tjb-ssr/home?spma=mspd&spmb=qdmsxiadan&sceneId=7310&deliveryId=69029&itemIds=商品&spm=a2141.7631565.tbshopmod-photo_retouch.26',
+        label: '5w',
+        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tbms-cooperation/home?x-ssr=true&disableNav=YES&x-preload=true&disableProgress=true&forceThemis=true&x-sec=wua&spma=farm&spmb=46066528&hd_from_id=100085&bybtSceneId=babaFarmFertilizer&red_packet_channel=farmorder&sceneId=5387&deliveryId=101097&implId=other_1364_3194018_101097_0&fromToken=1wllqZLHQdGzL8G5t9BZfbN1VuDU1U2UOURUXU1U0Z&itemIds=商品ID&taskhubType=taskhubcc&taskFrom=wulengjing&sourceType=other&spm=a2141.7631571.tbshopmod-series_title_link.0&spm=a2141.7631565.tbshopmod-photo_retouch.2',
       },
       {
-        label: '5W/4W',
-        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tjb-ssr/home?spma=mspd&spmb=qdmsxiadan&sceneId=7506&deliveryId=70424&itemIds=商品&spm=a2141.7631565.tbshopmod-photo_retouch.27',
+        label: '5w',
+        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tbms-cooperation/home?disableProgress=true&From=times&disableNav=YES&scene=wt&spma=farm&spmb=46066528&bybtSceneId=babaFarmFertilizer&red_packet_channel=farmorder&taskhubType=tasktimehubcc&taskFrom=wulengjing&originQueryId=2147825d17904460254t0i4m3e0se6&fromToken=2Jwz17V05f7KKbXQz6urpKhK8JoU1UdUWUDUVURUJhWJ&hd_from_id=100085&prismTrace=70424&deliveryId=70424&sceneId=7506&itemIds=商品ID&spm=a2141.7631571.tbshopmod-photo_retouch.9&spm=a2141.7631565.tbshopmod-photo_retouch.7',
       },
       {
-        label: '4W',
-        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tjb-ssr/home?spma=mspd&spmb=qdmsxiadan&sceneId=7506&deliveryId=74994&itemIds=商品&spm=a2141.7631565.tbshopmod-photo_retouch.28',
+        label: '4w',
+        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tbms-cooperation/home?disableProgress=true&From=times&disableNav=YES&scene=wt&spma=farm&spmb=46066528&bybtSceneId=babaFarmFertilizer&red_packet_channel=farmorder&taskhubType=tasktimehubcc&taskFrom=wulengjing&originQueryId=2147825d17904460254t0i4m3e0se6&fromToken=2Jwz17V05f7KKbXQz6urpKhK8JoU1UdUWUDUVURUJhWJ&hd_from_id=100085&prismTrace=69029&deliveryId=69029&sceneId=7310&itemIds=商品ID&spm=a2141.7631571.tbshopmod-photo_retouch.8&spm=a2141.7631565.tbshopmod-photo_retouch.8',
       },
       {
-        label: '4W',
-        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tjb-ssr/home?spma=mspd&spmb=qdmsxiadan&sceneId=7506&deliveryId=68422&itemIds=商品&spm=a2141.7631565.tbshopmod-photo_retouch.29',
+        label: '4w',
+        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tbms-cooperation/home?disableProgress=true&From=times&disableNav=YES&scene=wt&spma=farm&spmb=46066528&bybtSceneId=babaFarmFertilizer&red_packet_channel=farmorder&taskhubType=tasktimehubcc&taskFrom=wulengjing&originQueryId=2147825d17904460254t0i4m3e0se6&fromToken=2Jwz17V05f7KKbXQz6urpKhK8JoU1UdUWUDUVURUJhWJ&hd_from_id=100085&prismTrace=68422&deliveryId=68422&sceneId=7506&itemIds=商品ID&spm=a2141.7631571.tbshopmod-photo_retouch.16&spm=a2141.7631565.tbshopmod-photo_retouch.4',
+      },
+      {
+        label: '4w',
+        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tbms-cooperation/home?disableProgress=true&From=times&disableNav=YES&scene=wt&spma=farm&spmb=46066528&bybtSceneId=babaFarmFertilizer&red_packet_channel=farmorder&taskhubType=tasktimehubcc&taskFrom=wulengjing&originQueryId=2147825d17904460254t0i4m3e0se6&fromToken=2Jwz17V05f7KKbXQz6urpKhK8JoU1UdUWUDUVURUJhWJ&hd_from_id=100085&prismTrace=74994&deliveryId=74994&sceneId=7506&itemIds=商品ID&spm=a2141.7631571.tbshopmod-photo_retouch.13&spm=a2141.7631565.tbshopmod-photo_retouch.5',
+      },
+      {
+        label: '4w',
+        tpl: 'https://pages-fast.m.taobao.com/wow/z/app/ltao-fe/tbms-cooperation/home?disableProgress=true&From=times&disableNav=YES&scene=wt&spma=farm&spmb=46066528&bybtSceneId=babaFarmFertilizer&red_packet_channel=farmorder&taskhubType=tasktimehubcc&taskFrom=wulengjing&originQueryId=2147825d17904460254t0i4m3e0se6&fromToken=2Jwz17V05f7KKbXQz6urpKhK8JoU1UdUWUDUVURUJhWJ&hd_from_id=100085&prismTrace=79447&deliveryId=79447&sceneId=7506&itemIds=商品ID&spm=a2141.7631571.tbshopmod-photo_retouch.12&spm=a2141.7631565.tbshopmod-photo_retouch.6',
       },
     ],
   },
@@ -827,7 +833,7 @@ const multipleRendered = computed(() => {
   const itemId = extractedItemId.value
   const out = []
   for (const link of selectedFunction.links) {
-    const url = link.tpl.replace(/商品/g, encodeURIComponent(itemId))
+    const url = link.tpl.replace(/商品ID/g, encodeURIComponent(itemId))
     out.push({ label: link.label, url })
   }
   return out
