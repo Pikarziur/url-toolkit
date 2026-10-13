@@ -357,7 +357,7 @@
           </div>
           <label class="addr-checkbox">
             <input type="checkbox" v-model="addrForm.multiNumber" />
-            <span>多号（6 组）</span>
+            <span>多号</span>
           </label>
         </div>
       </section>
