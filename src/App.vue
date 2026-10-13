@@ -346,6 +346,11 @@
             >🏘 小区</button>
             <button
               class="addr-radio"
+              :class="{ active: addrForm.type === 'building' }"
+              @click="addrForm.type = 'building'"
+            >🏢 号楼</button>
+            <button
+              class="addr-radio"
               :class="{ active: addrForm.type === 'shop' }"
               @click="addrForm.type = 'shop'"
             >🏪 店铺</button>
@@ -623,7 +628,7 @@ const currentTab = ref('ban')
 const addrForm = reactive({
   fixedAddress: '',
   tailNumber: '',
-  type: 'community',   // 'community' | 'shop'
+  type: 'community',   // 'community' | 'building' | 'shop'
   multiNumber: false,
 })
 const addrResults = ref([])
@@ -873,25 +878,78 @@ async function expand() {
 }
 
 async function copy(text, key) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text)
-    } else {
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-    }
+  const ok = await copyText(text)
+  if (ok) {
     copied[key] = true
     showToast('已复制到剪贴板', 'success')
-    setTimeout(() => (copied[key] = false), 1600)
-  } catch {
-    showToast('复制失败，请手动复制', 'error')
+    setTimeout(() => { if (copied[key] === true) delete copied[key] }, 1600)
+  } else {
+    // 安卓部分 WebView（微信/支付宝内置浏览器等）会禁止程序化写入剪贴板，
+    // 此时退回“手动长按复制”：弹出一个已选中的文本框，用户长按即可复制。
+    showManualCopy(text)
   }
+  return ok
+}
+
+// 跨平台可靠复制：
+//  1) 优先异步剪贴板 API（iOS Safari / 现代 Android Chrome，需 HTTPS 安全上下文）
+//  2) 失败降级到 execCommand —— 关键：安卓/iOS WebView 会忽略 opacity:0 的隐藏框，
+//     必须把文本框放到屏幕外但保持“可见”(opacity:1) 并真正选中，复制才会生效。
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch (_) {
+      // 部分安卓 WebView 虽有 navigator.clipboard 但 writeText 抛错，继续走降级
+    }
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.top = '0'
+    ta.style.left = '0'
+    ta.style.width = '1px'
+    ta.style.height = '1px'
+    ta.style.padding = '0'
+    ta.style.margin = '0'
+    ta.style.border = 'none'
+    ta.style.outline = 'none'
+    ta.style.boxShadow = 'none'
+    ta.style.background = 'transparent'
+    ta.style.opacity = '1'   // 不能用 0，否则安卓/微信 WebView 直接忽略导致复制失败
+    ta.style.zIndex = '-1'
+    ta.style.fontSize = '12px'
+    ta.style.lineHeight = '12px'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    ta.setSelectionRange(0, text.length)
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch (_) {
+    return false
+  }
+}
+
+// 程序化复制被禁用时的兜底：露出可长按复制的文本框
+function showManualCopy(text) {
+  showToast('复制失败，请长按下方文本框手动复制', 'error')
+  const wrap = document.createElement('div')
+  wrap.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#fff;color:#111;padding:10px 12px;box-shadow:0 -2px 12px rgba(0,0,0,.18);border-top:1px solid #eee;'
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.readOnly = true
+  ta.style.cssText = 'width:100%;height:88px;font-size:13px;line-height:1.45;border:1px solid #ddd;border-radius:8px;padding:8px;box-sizing:border-box;background:#fafafa;'
+  wrap.appendChild(ta)
+  document.body.appendChild(wrap)
+  ta.focus()
+  ta.select()
+  setTimeout(() => ta.select(), 60)
+  setTimeout(() => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap) }, 4500)
 }
 
 async function copyAllResults() {
@@ -944,6 +1002,12 @@ function generateRandomAddress() {
       const unit = 1 + Math.floor(Math.random() * 20)
       const house = `${floor}${String(unit).padStart(2, '0')}`
       address = `${addrForm.fixedAddress} ${cm}小区${building}号楼${house}室`
+    } else if (addrForm.type === 'building') {
+      const building = 1 + Math.floor(Math.random() * 50)
+      const floor = 1 + Math.floor(Math.random() * 30)
+      const unit = 1 + Math.floor(Math.random() * 20)
+      const house = `${floor}${String(unit).padStart(2, '0')}`
+      address = `${addrForm.fixedAddress} ${building}号楼${house}室`
     } else {
       let c1, c2
       do {
@@ -976,18 +1040,22 @@ function generateRandomAddress() {
 async function copyAddrInfo(index) {
   const info = addrResults.value[index]
   const text = `姓名：${info.name}\n地址：${info.address}\n手机号：${info.phone}`
-  await copy(text, `addr_${index}`)
-  addrCopied[index] = true
-  setTimeout(() => { delete addrCopied[index] }, 1600)
+  const ok = await copy(text, `addr_${index}`)
+  if (ok) {
+    addrCopied[index] = true
+    setTimeout(() => { delete addrCopied[index] }, 1600)
+  }
 }
 
 async function copyAllAddrResults() {
   const text = addrResults.value.map((info, i) => {
     return `NO.${i + 1}  姓名：${info.name}\n地址：${info.address}\n手机号：${info.phone}`
   }).join('\n\n')
-  await copy(text, 'addr_all')
-  addrAllCopied.value = true
-  setTimeout(() => { addrAllCopied.value = false }, 1600)
+  const ok = await copy(text, 'addr_all')
+  if (ok) {
+    addrAllCopied.value = true
+    setTimeout(() => { addrAllCopied.value = false }, 1600)
+  }
 }
 
 function showToast(msg, type = 'success') {
