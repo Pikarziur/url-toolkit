@@ -659,6 +659,11 @@ input:focus, textarea:focus {
   font-weight: 700;
   color: var(--primary);
 }
+.ban-total-inline .ban-update-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+}
 
 /* 数据源细分：单行，与标题文字左对齐（跳过图标） */
 .ban-sub-row {

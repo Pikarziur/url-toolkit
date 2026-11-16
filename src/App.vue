@@ -184,7 +184,7 @@
           <h2 class="card-title ban-title">
             <span class="icon">🔍</span> 查询禁拍店铺
             <template v-if="!banLoading && !banLoadError">
-              <span class="ban-total-inline">（共 <strong class="ban-total">{{ banTotalLoaded }}</strong> 条）</span>
+              <span class="ban-total-inline">（共 <strong class="ban-total">{{ banTotalLoaded }}</strong> 条 · 更新于 <strong class="ban-update-date">{{ BAN_DATA_UPDATED }}</strong>）</span>
             </template>
           </h2>
         </div>
@@ -461,6 +461,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 
 // ===== 查禁拍数据：jsDelivr CDN（Cloudflare 全球加速，7 天刷新缓存） =====
+// 数据更新日期：每次更新 anheng/error/long 或自定义禁拍库时，同步改成当天日期
+const BAN_DATA_UPDATED = '2026-11-16'
+
 const BAN_URLS = {
   anheng: 'https://cdn.jsdelivr.net/gh/Pikarziur/Data@main/BanShop/anheng.json',
   error:  'https://cdn.jsdelivr.net/gh/Pikarziur/Data@main/BanShop/error.json',
