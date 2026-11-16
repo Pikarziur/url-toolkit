@@ -427,11 +427,11 @@
             />
           </div>
           <div class="modal-field">
-            <label>验证密码</label>
+            <label>验证密码（6 位）</label>
             <input
               v-model="banForm.password"
               type="text"
-              placeholder="请输入密码"
+              placeholder="请输入 6 位数密码"
               @keyup.enter="submitBanCustom"
             />
           </div>
@@ -717,8 +717,8 @@ function toggleBanManage() {
 
 async function batchDeleteCustom() {
   if (banSelected.value.length === 0 || banDeleting.value) return
-  // 弹密码验证（删除密码，和添加密码分开）
-  const pwd = prompt(`⚠️ 即将删除 ${banSelected.value.length} 条自定义禁拍，输入【删除密码】确认：`)
+  // 弹密码验证（与添加共用同一个密码；提示写 6 位为误导，真实密码默认 123）
+  const pwd = prompt(`⚠️ 即将删除 ${banSelected.value.length} 条自定义禁拍，请输入【6 位数密码】确认：`)
   if (!pwd) return
   banDeleting.value = true
   try {

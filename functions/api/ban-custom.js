@@ -44,11 +44,9 @@ async function writeList(kv, list) {
   await kv.put(KV_KEY, JSON.stringify(list));
 }
 
-function verifyPassword(request, env, type) {
-  // type: 'add' | 'delete' —— 两种密码分开配
-  const expected = type === 'delete'
-    ? (env.BAN_DELETE_PASSWORD || env.BAN_WRITE_PASSWORD || DEFAULT_PASSWORD)
-    : (env.BAN_ADD_PASSWORD || env.BAN_WRITE_PASSWORD || DEFAULT_PASSWORD);
+function verifyPassword(request, env) {
+  // 添加 / 删除统一使用同一个密码：默认 123，可用 BAN_WRITE_PASSWORD 环境变量覆盖
+  const expected = env.BAN_WRITE_PASSWORD || DEFAULT_PASSWORD;
   const auth = request.headers.get('Authorization');
   if (!auth) return false;
   const provided = auth.startsWith('Bearer ') ? auth.slice(7).trim() : auth.trim();
@@ -82,7 +80,7 @@ export async function onRequest(context) {
     }
 
     if (request.method === 'POST') {
-      if (!verifyPassword(request, env, 'add')) return errJson('添加权限-密码错误', 401);
+      if (!verifyPassword(request, env)) return errJson('密码错误', 401);
       let body;
       try { body = await request.json(); } catch { return errJson('请求体需为 JSON'); }
       const text = (body.text || '').trim();
@@ -97,7 +95,7 @@ export async function onRequest(context) {
     }
 
     if (request.method === 'DELETE') {
-      if (!verifyPassword(request, env, 'delete')) return errJson('删除权限-密码错误', 401);
+      if (!verifyPassword(request, env)) return errJson('密码错误', 401);
       let body;
       try { body = await request.json(); } catch { return errJson('请求体需为 JSON'); }
       const text = (body.text || '').trim();
