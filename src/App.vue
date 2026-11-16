@@ -465,8 +465,8 @@ import errorData  from '../ban/error.json'
 import longData   from '../ban/long.json'
 
 // ===== 查禁拍数据（本地静态库 + 自定义 KV 库） =====
-// 数据更新日期：每次更新 ban/*.json 或自定义禁拍库时，同步改成当天日期
-const BAN_DATA_UPDATED = '2026-11-16'
+// 数据更新日期由 Vite 在构建时自动注入（取 ban/*.json 最新修改时间），无需手动维护
+const BAN_DATA_UPDATED = __BAN_DATA_UPDATED__
 
 // 静态库直接从打包数据初始化——秒开、免网络、无缓存滞后
 const anhengList = ref(anhengData)
