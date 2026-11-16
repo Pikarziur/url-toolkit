@@ -192,7 +192,7 @@
         <!-- 数据源细分 / 加载提示（固定高度，防止刷新时面板跳动） -->
         <div class="ban-sub-row">
           <p v-if="!banLoadError" class="ban-src-breakdown">
-            <template v-if="banLoading">⏳ 正在从云端拉取禁拍数据库…</template>
+            <template v-if="banLoading">⏳ 正在加载自定义禁拍库…</template>
             <template v-else>anheng：{{ banSrcStats.anheng }} · error：{{ banSrcStats.error }} · long：{{ banSrcStats.long }} · 自定义：{{ banSrcStats.custom }}</template>
           </p>
           <div v-else class="ban-src-breakdown ban-load-error-inline">
@@ -459,20 +459,19 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+// 禁拍库：本地 ban/ 目录，由 Vite 静态打包进前端，随构建发布，不依赖外部 CDN
+import anhengData from '../ban/anheng.json'
+import errorData  from '../ban/error.json'
+import longData   from '../ban/long.json'
 
-// ===== 查禁拍数据：jsDelivr CDN（Cloudflare 全球加速，7 天刷新缓存） =====
-// 数据更新日期：每次更新 anheng/error/long 或自定义禁拍库时，同步改成当天日期
+// ===== 查禁拍数据（本地静态库 + 自定义 KV 库） =====
+// 数据更新日期：每次更新 ban/*.json 或自定义禁拍库时，同步改成当天日期
 const BAN_DATA_UPDATED = '2026-11-16'
 
-const BAN_URLS = {
-  anheng: 'https://cdn.jsdelivr.net/gh/Pikarziur/Data@main/BanShop/anheng.json',
-  error:  'https://cdn.jsdelivr.net/gh/Pikarziur/Data@main/BanShop/error.json',
-  long:   'https://cdn.jsdelivr.net/gh/Pikarziur/Data@main/BanShop/long.json',
-}
-
-const anhengList = ref([])
-const errorList  = ref([])
-const longList   = ref([])
+// 静态库直接从打包数据初始化——秒开、免网络、无缓存滞后
+const anhengList = ref(anhengData)
+const errorList  = ref(errorData)
+const longList   = ref(longData)
 const customList = ref([])
 const banLoading = ref(false)
 const banLoadError = ref('')
@@ -503,77 +502,37 @@ function invertBanSelect() {
   banSelected.value = customList.value.filter(item => !set.has(item))
 }
 
-const BAN_CACHE_KEY = 'ban-shop-data-v2'
-const BAN_CACHE_TTL = 10 * 60 * 1000 // 10 分钟
+// 自定义库（KV）本地缓存：仅用于自定义条目的秒开，静态库随 bundle 无需缓存
+const BAN_CUSTOM_CACHE_KEY = 'ban-custom-v1'
 
-function loadBanCache() {
+function loadCustomCache() {
   try {
-    const raw = localStorage.getItem(BAN_CACHE_KEY)
+    const raw = localStorage.getItem(BAN_CUSTOM_CACHE_KEY)
     if (!raw) return null
-    const cached = JSON.parse(raw)
-    if (Date.now() - cached.ts > BAN_CACHE_TTL) return null
-    return cached
+    const arr = JSON.parse(raw)
+    return Array.isArray(arr) ? arr : null
   } catch { return null }
-}
-function saveBanCache(data) {
-  try {
-    localStorage.setItem(BAN_CACHE_KEY, JSON.stringify({ ...data, ts: Date.now() }))
-  } catch {}
-}
-
-function applyBanData(data) {
-  anhengList.value = data.anheng || []
-  errorList.value = data.error || []
-  longList.value = data.long || []
-  customList.value = data.custom || []
-}
-
-async function fetchBanNetworkData() {
-  const entries = Object.entries(BAN_URLS)
-  const results = await Promise.all(
-    entries.map(async ([key, url]) => {
-      const resp = await fetch(url)
-      if (!resp.ok) throw new Error(`${key} HTTP ${resp.status}`)
-      const json = await resp.json()
-      return [key, Array.isArray(json) ? json : []]
-    }),
-    (async () => {
-      try {
-        const resp = await fetch('/api/ban-custom')
-        if (resp.ok) {
-          const data = await resp.json()
-          return ['custom', Array.isArray(data.list) ? data.list : []]
-        }
-      } catch {}
-      return ['custom', []]
-    })()
-  )
-  const merged = {}
-  for (const [key, arr] of results) merged[key] = arr
-  return merged
 }
 
 async function loadBanData() {
-  // 1. 先读本地缓存 → 秒开
-  const cached = loadBanCache()
-  if (cached) {
-    applyBanData(cached)
-    banLoading.value = false
-  } else {
-    banLoading.value = true
-  }
+  // 1. 静态库（anheng/error/long）已随 bundle 加载完成，直接用
+  // 2. 自定义库先读缓存 → 秒开
+  const cached = loadCustomCache()
+  if (cached) customList.value = cached
 
-  // 2. 后台拉最新数据
+  // 3. 后台拉自定义库最新数据（KV）
   try {
-    const data = await fetchBanNetworkData()
-    applyBanData(data)
-    saveBanCache(data)
+    const resp = await fetch('/api/ban-custom')
+    if (resp.ok) {
+      const data = await resp.json()
+      const list = Array.isArray(data.list) ? data.list : []
+      customList.value = list
+      try { localStorage.setItem(BAN_CUSTOM_CACHE_KEY, JSON.stringify(list)) } catch {}
+    }
     banLoadError.value = ''
   } catch (e) {
-    // 网络失败没关系，缓存已经展示了
-    if (!cached) banLoadError.value = e.message || '加载失败'
-  } finally {
-    banLoading.value = false
+    // 自定义库拉取失败不影响静态库（已展示），仅在没有缓存时提示
+    if (!cached) banLoadError.value = e.message || '自定义库加载失败'
   }
 }
 
